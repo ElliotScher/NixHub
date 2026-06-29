@@ -36,7 +36,7 @@
     {
       devShells = forEachSystem ({ pkgs, libPath, ... }: rec {
         # Environment for the Acadia AI project
-        acadia-ai-e26 = pkgs.mkShell {
+        acadia-ai = pkgs.mkShell {
           name = "acadia-ai-e26-env";
 
           packages = [
