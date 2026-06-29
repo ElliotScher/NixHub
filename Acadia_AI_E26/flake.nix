@@ -17,10 +17,11 @@
           config.allowUnfree = true; # Allow unfree packages if needed
         };
         
-        # Library path for PyPI wheels on NixOS (includes X11, GL, and DBus)
+        # Library path for PyPI wheels on NixOS (includes X11, GL, DBus, and Qt6 dependencies)
         libPath = pkgs.lib.makeLibraryPath [
           pkgs.stdenv.cc.cc
           pkgs.zlib
+          pkgs.zstd
           pkgs.glib
           pkgs.libGL
           pkgs.libx11
@@ -30,6 +31,8 @@
           pkgs.libxcb
           pkgs.libxkbcommon
           pkgs.dbus.lib
+          pkgs.fontconfig
+          pkgs.freetype
         ];
       });
     in
