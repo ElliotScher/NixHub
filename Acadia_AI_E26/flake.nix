@@ -29,6 +29,7 @@
           pkgs.libxrender
           pkgs.libxi
           pkgs.libxcb
+          pkgs.libxcb-cursor
           pkgs.libxkbcommon
           pkgs.dbus.lib
           pkgs.fontconfig
