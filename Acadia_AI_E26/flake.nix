@@ -1,5 +1,5 @@
 {
-  description = "Centralized Nix development environments";
+  description = "Acadia AI E26 IQP Group Development Flake";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
@@ -51,6 +51,7 @@
           packages = [
             pkgs.python3
             pkgs.uv
+            pkgs.tesseract
           ];
 
           shellHook = ''
