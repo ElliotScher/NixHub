@@ -35,10 +35,10 @@
           pkgs.fontconfig
           pkgs.freetype
           pkgs.wayland
-          pkgs.xorg.xcbutilwm
-          pkgs.xorg.xcbutilimage
-          pkgs.xorg.xcbutilkeysyms
-          pkgs.xorg.xcbutilrenderutil
+          pkgs.libxcb-wm
+          pkgs.libxcb-image
+          pkgs.libxcb-keysyms
+          pkgs.libxcb-render-util
         ];
       });
     in
