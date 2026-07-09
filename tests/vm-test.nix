@@ -13,6 +13,7 @@ pkgs.testers.nixosTest {
 
       imports = [
         ../common/configuration.nix
+        ../users/elliotscher/account.nix
         home-manager.nixosModules.home-manager
       ];
 
@@ -20,7 +21,7 @@ pkgs.testers.nixosTest {
       home-manager.useUserPackages = true;
       home-manager.backupFileExtension = "backup";
       home-manager.extraSpecialArgs = { inherit inputs; };
-      home-manager.users.elliotscher = import ../home/elliotscher.nix;
+      home-manager.users.elliotscher = import ../users/elliotscher/home.nix;
     };
 
   testScript = ''

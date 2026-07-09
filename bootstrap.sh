@@ -13,7 +13,7 @@ NEW_HOST="$(bash scripts/pick-hostname.sh HOSTNAMES.md hosts)"
 echo "Assigning hostname: $NEW_HOST"
 
 HOST_DIR="hosts/$NEW_HOST"
-mkdir -p "$HOST_DIR"
+mkdir -p "$HOST_DIR/home"
 
 SCRATCH_DIR="$(mktemp -d)"
 trap 'rm -rf "$SCRATCH_DIR"' EXIT
@@ -32,13 +32,17 @@ cat > "$HOST_DIR/configuration.nix" <<EOF
 }
 EOF
 
-cat > "$HOST_DIR/home.nix" <<EOF
+cat > "$HOST_DIR/users.nix" <<EOF
+[ "elliotscher" ]
+EOF
+
+cat > "$HOST_DIR/home/elliotscher.nix" <<EOF
 { config, pkgs, lib, inputs, ... }:
 
 {
-  # Host-specific home-manager overrides for $NEW_HOST go here.
-  # Anything in ../../home/elliotscher.nix marked with lib.mkDefault can be
-  # overridden with a plain assignment.
+  # Host-specific home-manager overrides for elliotscher on $NEW_HOST go
+  # here. Anything in ../../../users/elliotscher/home.nix marked with
+  # lib.mkDefault can be overridden with a plain assignment.
 }
 EOF
 

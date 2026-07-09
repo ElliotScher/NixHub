@@ -13,28 +13,37 @@ NixHub/
   bootstrap.sh             # new-machine setup script, exposed as `nix run .#bootstrap`
   HOSTNAMES.md              # ordered hostname sequence (see below)
   common/
-    configuration.nix       # system config shared by every host
-  home/
-    elliotscher.nix          # home-manager config shared by every host
+    configuration.nix       # system config shared by every host, no specific user
+  users/
+    <name>/
+      account.nix             # this user's NixOS account (users.users.<name>)
+      home.nix                # this user's home-manager config, shared by every host
   hosts/
     <name>/
       configuration.nix      # this host's system deltas
       hardware-configuration.nix  # machine-generated, never hand-edited
-      home.nix                 # this host's home-manager deltas
+      users.nix                # list of usernames that exist on this host
+      home/
+        <user>.nix              # this host's home-manager deltas for <user> (optional)
 ```
 
-`common/configuration.nix` and `home/elliotscher.nix` hold everything that
-applies to every machine. `hosts/<name>/` holds only what's specific to one
-machine - typically nothing at all beyond hardware detection, until a
-specific host needs to deviate from the shared config.
+`common/configuration.nix` holds system config shared by every host,
+independent of who's logged in. `users/<name>/` holds one user's account
+definition and home-manager config, shared across every host they appear on.
+`hosts/<name>/users.nix` is the list of which of those users actually exist
+on that host - most hosts will just have `[ "elliotscher" ]`, but a shared
+machine can list more than one. `hosts/<name>/` otherwise holds only what's
+specific to one machine - typically nothing at all beyond hardware
+detection and its user list, until a specific host needs to deviate from
+the shared config.
 
 ## Overriding shared config per-host
 
 Every overridable value in `common/configuration.nix` and
-`home/elliotscher.nix` is wrapped in `lib.mkDefault`. That gives it low
+`users/<name>/home.nix` is wrapped in `lib.mkDefault`. That gives it low
 priority, so a plain assignment in a host's own `configuration.nix` or
-`home.nix` silently wins - no conflict, no need for `lib.mkForce`. For
-example, to change the timezone on just one host:
+`home/<user>.nix` silently wins - no conflict, no need for `lib.mkForce`.
+For example, to change the timezone on just one host:
 
 ```nix
 # hosts/<name>/configuration.nix
@@ -93,7 +102,8 @@ nix --extra-experimental-features "nix-command flakes" run github:ElliotScher/Ni
 This clones the repo (if not already present) to
 `~/Documents/Development/NixHub`, picks the next unused hostname, generates
 that machine's `hardware-configuration.nix`, scaffolds empty
-`hosts/<name>/configuration.nix` and `home.nix` files, and commits + pushes
+`hosts/<name>/configuration.nix`, `users.nix` (defaulting to
+`[ "elliotscher" ]`), and `home/elliotscher.nix` files, and commits + pushes
 the new host to GitHub. It prints the exact rebuild command to run once
 you've reviewed the scaffolded files:
 
@@ -131,10 +141,10 @@ runs everything below in one command:
   (`scripts/test-pick-hostname.sh`), covering the no-hosts-used, some-used,
   all-used, and mid-list-insertion cases.
 - **`checks.vm-smoke-test`** - boots `common/configuration.nix` +
-  `home/elliotscher.nix` (the config shared by every host, independent of
-  any one host's real hardware) in a NixOS VM and asserts the system
-  reaches `multi-user.target`, the `elliotscher` user and its packages
-  exist, home-manager activation completed, and GDM reaches
+  `users/elliotscher/{account,home}.nix` (the config shared by every host,
+  independent of any one host's real hardware) in a NixOS VM and asserts
+  the system reaches `multi-user.target`, the `elliotscher` user and its
+  packages exist, home-manager activation completed, and GDM reaches
   `graphical.target`.
 
 The individual checks can also be run on their own, e.g.

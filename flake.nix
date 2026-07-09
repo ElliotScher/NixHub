@@ -24,29 +24,32 @@
         lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ./hosts)
       );
 
-      mkHost = name: lib.nixosSystem {
-        inherit system pkgs;
-        specialArgs = { inherit inputs; };
-        modules = [
-          ./common/configuration.nix
-          { networking.hostName = name; }
-          ./hosts/${name}/configuration.nix
-          ./hosts/${name}/hardware-configuration.nix
-          home-manager.nixosModules.home-manager
-          {
-            home-manager.useGlobalPkgs = true;
-            home-manager.useUserPackages = true;
-            home-manager.backupFileExtension = "backup";
-            home-manager.extraSpecialArgs = { inherit inputs; };
-            home-manager.users.elliotscher = {
-              imports = [
-                ./home/elliotscher.nix
-                ./hosts/${name}/home.nix
-              ];
-            };
-          }
-        ];
-      };
+      mkHost = name:
+        let
+          hostUsers = import ./hosts/${name}/users.nix;
+          hostUserHome = user: ./hosts/${name}/home/${user}.nix;
+        in
+        lib.nixosSystem {
+          inherit system pkgs;
+          specialArgs = { inherit inputs; };
+          modules = [
+            ./common/configuration.nix
+            { networking.hostName = name; }
+            ./hosts/${name}/configuration.nix
+            ./hosts/${name}/hardware-configuration.nix
+            home-manager.nixosModules.home-manager
+            {
+              home-manager.useGlobalPkgs = true;
+              home-manager.useUserPackages = true;
+              home-manager.backupFileExtension = "backup";
+              home-manager.extraSpecialArgs = { inherit inputs; };
+              home-manager.users = lib.genAttrs hostUsers (user: {
+                imports = [ ./users/${user}/home.nix ]
+                  ++ lib.optional (builtins.pathExists (hostUserHome user)) (hostUserHome user);
+              });
+            }
+          ] ++ map (user: ./users/${user}/account.nix) hostUsers;
+        };
     in
     {
       nixosConfigurations = lib.genAttrs hostNames mkHost;
