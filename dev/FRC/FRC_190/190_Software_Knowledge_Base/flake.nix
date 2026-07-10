@@ -1,5 +1,5 @@
 {
-  description = "Personal Portfolio Development Flake";
+  description = "FRC 190 Software Knowledge Base Development Flake";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
@@ -18,28 +18,21 @@
         };
       });
 
-      shellBanner = import ../lib/shell-banner.nix;
+      shellBanner = import ../../../lib/shell-banner.nix;
     in
     {
       devShells = forEachSystem ({ pkgs, ... }: rec {
-        # Environment for the Portfolio project
-        portfolio = pkgs.mkShell {
-          name = "portfolio-env";
+        # Environment for the 190 Software Knowledge Base docs site
+        knowledge-base = pkgs.mkShell {
+          name = "190-software-knowledge-base-env";
 
           packages = [
             pkgs.nodejs_22
-            pkgs.chromium
           ];
 
           shellHook = ''
-            # Point puppeteer (used by scripts/build-resumes.js) at nixpkgs' Chromium
-            # instead of letting it download its own (which doesn't work well on NixOS).
-            export PUPPETEER_SKIP_DOWNLOAD=true
-            export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-            export PUPPETEER_EXECUTABLE_PATH="${pkgs.chromium}/bin/chromium"
-
             ${shellBanner {
-              title = "Welcome to the Personal Portfolio Dev Environment";
+              title = "Welcome to the 190 Software Knowledge Base Dev Environment";
               subtitle = "Using Node.js $(node --version) and npm.";
             }}
             echo ""
@@ -58,14 +51,13 @@
 
             echo ""
             center "You can run your project using:"
-            center "npm run dev"
+            center "npm run start"
             center "npm run build"
             center "npm run test"
-            center "npm run build-resumes"
             echo "$BAR"
           '';
         };
-        default = portfolio;
+        default = knowledge-base;
       });
     };
 }

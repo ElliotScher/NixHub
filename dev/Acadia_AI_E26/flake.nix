@@ -41,6 +41,8 @@
           pkgs.libxcb-render-util
         ];
       });
+
+      shellBanner = import ../lib/shell-banner.nix;
     in
     {
       devShells = forEachSystem ({ pkgs, libPath, ... }: rec {
@@ -58,27 +60,27 @@
             # Setup LD_LIBRARY_PATH for PyPI wheels inside the shell
             export LD_LIBRARY_PATH="${libPath}:$LD_LIBRARY_PATH"
 
-            echo "============================================================"
-            echo "    Welcome to the Acadia AI E26 Development Environment    "
-            echo "============================================================"
-            echo "                 Using base Python and uv."
+            ${shellBanner {
+              title = "Welcome to the Acadia AI E26 Development Environment";
+              subtitle = "Using base Python and uv.";
+            }}
             echo ""
 
             # 1. Automatically create/sync the virtual environment using uv
             if [ ! -d ".venv" ]; then
-              echo "Creating virtual environment and syncing dependencies..."
+              center "Creating virtual environment and syncing dependencies..."
               uv venv
               VIRTUAL_ENV=.venv uv sync
             elif [ "uv.lock" -nt ".venv" ]; then
-              echo "uv.lock updated. Syncing dependencies..."
+              center "uv.lock updated. Syncing dependencies..."
               VIRTUAL_ENV=.venv uv sync
               touch .venv
             else
-              echo "Dependencies are up-to-date."
+              center "Dependencies are up-to-date."
             fi
 
             # 2. Setup stable python wrappers to make PyCharm work without plugins
-            echo "Creating Python interpreter wrappers for IDE compatibility..."
+            center "Creating Python interpreter wrappers for IDE compatibility..."
             rm -f .venv/bin/python .venv/bin/python3 .venv/bin/python-real .venv/bin/python3-real
             ln -sfn ${pkgs.python3}/bin/python3 .venv/bin/python-real
             ln -sfn ${pkgs.python3}/bin/python3 .venv/bin/python3-real
@@ -105,9 +107,9 @@
             source .venv/bin/activate
 
             echo ""
-            echo "            You can run your project using:"
-            echo "                python src/detection/yolo.py"
-            echo "============================================================"
+            center "You can run your project using:"
+            center "python src/detection/yolo.py"
+            echo "$BAR"
           '';
         };
         default = acadia-ai;
