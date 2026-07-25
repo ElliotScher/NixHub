@@ -86,18 +86,18 @@ moment. Append more numerals to the list whenever you're running low.
 
 ## Setting up a new machine
 
-After installing NixOS (or on an already-running system), run:
-
-```
-nix run github:ElliotScher/NixHub#bootstrap
-```
-
-On a completely fresh install, flakes aren't enabled yet, so the very first
-invocation needs the experimental features passed explicitly:
+After installing NixOS (or on an already-running system), the only
+prerequisite is a network connection - run:
 
 ```
 nix --extra-experimental-features "nix-command flakes" run github:ElliotScher/NixHub#bootstrap
 ```
+
+The `--extra-experimental-features` flag is there because a completely
+fresh install doesn't have flakes enabled yet; it's harmless to pass even
+once flakes are already enabled (e.g. after this repo's own config, which
+turns them on, has been applied), so this one form of the command always
+works regardless of the machine's state.
 
 This clones the repo (if not already present) to `~/Documents/NixHub`,
 picks the next unused hostname, and then asks a few questions about the
