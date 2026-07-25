@@ -96,6 +96,7 @@
 
       favorite-apps = [
         "brave-browser.desktop"
+        "google-chrome.desktop"
         "org.gnome.Console.desktop"
         "org.gnome.Nautilus.desktop"
         "slack.desktop"
@@ -113,6 +114,7 @@
         "webstorm.desktop"
         "jetbrains-toolbox.desktop"
         "zotero.desktop"
+        "steam.desktop"
         "org.gnome.Settings.desktop"
         "nixos-manual.desktop"
       ];

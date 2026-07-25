@@ -26,6 +26,7 @@
       proton-vpn
 
       brave
+      google-chrome
 
       slack
       discord
