@@ -100,12 +100,26 @@ nix --extra-experimental-features "nix-command flakes" run github:ElliotScher/Ni
 ```
 
 This clones the repo (if not already present) to `~/Documents/NixHub`,
-picks the next unused hostname, generates
-that machine's `hardware-configuration.nix`, scaffolds empty
-`hosts/<name>/configuration.nix`, `users.nix` (defaulting to
-`[ "elliotscher" ]`), and `home/elliotscher.nix` files, and commits + pushes
-the new host to GitHub. It prints the exact rebuild command to run once
-you've reviewed the scaffolded files:
+picks the next unused hostname, and then asks a few questions about the
+machine being set up:
+
+- **Headless?** - if yes, `hosts/<name>/configuration.nix` and each
+  selected user's `hosts/<name>/home/<user>.nix` are scaffolded with the
+  overrides needed to skip GNOME entirely (`services.xserver`, GDM, the
+  GNOME desktop manager and core apps, system + home-manager `dconf`, GTK,
+  Qt, and VS Code) instead of empty stubs. Good for servers and other
+  machines that will never have a monitor attached.
+- **Users** - which of the existing `users/<name>/` profiles (found by
+  scanning for a `home.nix`) should exist on this host; defaults to just
+  `elliotscher`. Invalid names are rejected and re-prompted.
+- **Timezone** - optional per-host override; leave blank to inherit the
+  shared default from `common/configuration.nix`.
+
+It then generates that machine's `hardware-configuration.nix` and scaffolds
+`hosts/<name>/configuration.nix`, `users.nix`, and a `home/<user>.nix` per
+selected user accordingly, and commits + pushes the new host to GitHub. It
+prints the exact rebuild command to run once you've reviewed the scaffolded
+files:
 
 ```
 sudo nixos-rebuild switch --flake ~/Documents/NixHub#<name>

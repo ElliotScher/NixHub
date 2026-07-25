@@ -251,6 +251,13 @@
     };
   };
 
+  home.activation.extractBackgrounds = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    if [ ! -d "$HOME/Pictures/Backgrounds" ]; then
+      mkdir -p "$HOME/Pictures"
+      ${pkgs.unzip}/bin/unzip -q ${../common/Backgrounds.zip} -d "$HOME/Pictures"
+    fi
+  '';
+
   home.activation.makeVscodeSettingsWritable = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     if [ -L "$HOME/.config/Code/User/settings.json" ]; then
       target=$(readlink "$HOME/.config/Code/User/settings.json")

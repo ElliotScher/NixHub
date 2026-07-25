@@ -12,6 +12,55 @@ NEW_HOST="$(bash scripts/pick-hostname.sh HOSTNAMES.md hosts)"
 
 echo "Assigning hostname: $NEW_HOST"
 
+# ---------------------------------------------------------------------------
+# Interactive prompts - collect every setting needed to scaffold this host
+# before touching the filesystem, so nixos-generate-config isn't run only to
+# have the user abandon partway through answering questions.
+# ---------------------------------------------------------------------------
+
+echo
+read -r -p "Set up this host as headless (no desktop environment)? [y/N] " headless_answer
+if [[ "$headless_answer" =~ ^[Yy]$ ]]; then
+  HEADLESS=1
+else
+  HEADLESS=0
+fi
+
+mapfile -t AVAILABLE_USERS < <(
+  for dir in users/*/; do
+    user="$(basename "$dir")"
+    if [ -f "users/$user/home.nix" ]; then
+      echo "$user"
+    fi
+  done
+)
+
+echo
+echo "Available users: ${AVAILABLE_USERS[*]}"
+while true; do
+  read -r -p "Users to set up on this host (space-separated, default: elliotscher): " users_answer
+  if [ -z "$users_answer" ]; then
+    HOST_USERS=("elliotscher")
+  else
+    read -r -a HOST_USERS <<< "$users_answer"
+  fi
+
+  unknown_users=()
+  for user in "${HOST_USERS[@]}"; do
+    if [ ! -f "users/$user/home.nix" ]; then
+      unknown_users+=("$user")
+    fi
+  done
+
+  if [ "${#unknown_users[@]}" -eq 0 ]; then
+    break
+  fi
+  echo "Unknown user(s): ${unknown_users[*]} - no matching users/<name>/home.nix. Available: ${AVAILABLE_USERS[*]}" >&2
+done
+
+echo
+read -r -p "Timezone for this host (blank to use the shared default): " timezone_answer
+
 HOST_DIR="hosts/$NEW_HOST"
 mkdir -p "$HOST_DIR/home"
 
@@ -21,6 +70,23 @@ trap 'rm -rf "$SCRATCH_DIR"' EXIT
 sudo nixos-generate-config --dir "$SCRATCH_DIR"
 cp "$SCRATCH_DIR/hardware-configuration.nix" "$HOST_DIR/hardware-configuration.nix"
 
+CONFIG_EXTRA=""
+if [ "$HEADLESS" -eq 1 ]; then
+  CONFIG_EXTRA+="
+  # Headless host - no desktop environment.
+  services.xserver.enable = false;
+  services.displayManager.gdm.enable = false;
+  services.desktopManager.gnome.enable = false;
+  services.gnome.core-apps.enable = false;
+  programs.dconf.enable = false;
+"
+fi
+if [ -n "$timezone_answer" ]; then
+  CONFIG_EXTRA+="
+  time.timeZone = \"$timezone_answer\";
+"
+fi
+
 cat > "$HOST_DIR/configuration.nix" <<EOF
 { config, pkgs, lib, inputs, ... }:
 
@@ -29,22 +95,39 @@ cat > "$HOST_DIR/configuration.nix" <<EOF
   # networking.hostName is set automatically from this directory's name.
   # Anything in ../../common/configuration.nix marked with lib.mkDefault can
   # be overridden with a plain assignment.
-}
+$CONFIG_EXTRA}
 EOF
 
-cat > "$HOST_DIR/users.nix" <<EOF
-[ "elliotscher" ]
-EOF
+{
+  printf '['
+  for user in "${HOST_USERS[@]}"; do
+    printf ' "%s"' "$user"
+  done
+  printf ' ]\n'
+} > "$HOST_DIR/users.nix"
 
-cat > "$HOST_DIR/home/elliotscher.nix" <<EOF
+HOME_EXTRA=""
+if [ "$HEADLESS" -eq 1 ]; then
+  HOME_EXTRA="
+  # Headless host - no desktop environment.
+  gtk.enable = false;
+  qt.enable = false;
+  dconf.enable = false;
+  programs.vscode.enable = false;
+"
+fi
+
+for user in "${HOST_USERS[@]}"; do
+  cat > "$HOST_DIR/home/$user.nix" <<EOF
 { config, pkgs, lib, inputs, ... }:
 
 {
-  # Host-specific home-manager overrides for elliotscher on $NEW_HOST go
-  # here. Anything in ../../../users/elliotscher/home.nix marked with
-  # lib.mkDefault can be overridden with a plain assignment.
-}
+  # Host-specific home-manager overrides for $user on $NEW_HOST go here.
+  # Anything in ../../../users/$user/home.nix marked with lib.mkDefault can
+  # be overridden with a plain assignment.
+$HOME_EXTRA}
 EOF
+done
 
 git add "$HOST_DIR"
 git -c user.name="ElliotScher" -c user.email="ecscher84@gmail.com" commit -m "Add host $NEW_HOST"
