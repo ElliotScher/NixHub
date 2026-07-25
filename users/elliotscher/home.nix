@@ -122,7 +122,6 @@ in
         "webstorm.desktop"
         "jetbrains-toolbox.desktop"
         "zotero.desktop"
-        "steam.desktop"
         "org.gnome.Settings.desktop"
         "nixos-manual.desktop"
       ];

@@ -51,6 +51,25 @@
 
   programs.dconf.enable = lib.mkDefault true;
 
+  # GNOME Shell can silently reset org/gnome/shell/enabled-extensions back to
+  # empty on its own (observed after a shell version upgrade triggered its
+  # "welcome" flow), clobbering whatever home-manager's dconf activation had
+  # written. A locked system dconf database always wins over the user db, so
+  # this makes the setting stick no matter what GNOME (or the Extensions app)
+  # later writes. Keep this list in sync with the
+  # dconf.settings."org/gnome/shell".enabled-extensions list in
+  # ../users/elliotscher/home.nix.
+  programs.dconf.profiles.user.databases = lib.mkDefault [
+    {
+      settings."org/gnome/shell".enabled-extensions = [
+        "dash-to-dock@micxgx.gmail.com"
+        "appindicatorsupport@rgcjonas.gmail.com"
+        "gsconnect@andyholmes.github.io"
+      ];
+      locks = [ "/org/gnome/shell/enabled-extensions" ];
+    }
+  ];
+
   # ---------------------------
   # Keyboard layout
   # ---------------------------
