@@ -94,11 +94,11 @@ in
   # environment.shellAliases.
   dconf.settings = {
     "org/gnome/shell" = lib.mkDefault {
-      enabled-extensions = [
-        "dash-to-dock@micxgx.gmail.com"
-        "appindicatorsupport@rgcjonas.gmail.com"
-        "gsconnect@andyholmes.github.io"
-      ];
+      # enabled-extensions is deliberately not set here - it's locked via
+      # programs.dconf.profiles.user in common/configuration.nix instead, and
+      # home-manager's own dconf activation would fail outright ("attempted
+      # to modify one or more non-writable keys") if it tried to write a
+      # locked key too.
 
       disable-user-extensions = false;
 
