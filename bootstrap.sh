@@ -8,6 +8,17 @@ fi
 
 cd "$REPO_DIR" || exit 1
 
+# Authenticate GitHub CLI up front - this is what the later `git push` (both
+# bootstrap's own commit and everything after) relies on, and on a genuinely
+# fresh machine nothing has configured git credentials yet. `gh auth login`
+# also offers to wire itself up as git's credential helper, so plain `git
+# push` works immediately afterward too, not just `gh` commands.
+if ! gh auth status &>/dev/null; then
+  echo
+  echo "GitHub CLI isn't authenticated yet - this is needed to push commits."
+  gh auth login
+fi
+
 NEW_HOST="$(bash scripts/pick-hostname.sh HOSTNAMES.md hosts)"
 
 echo "Assigning hostname: $NEW_HOST"

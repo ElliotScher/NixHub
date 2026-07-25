@@ -128,11 +128,12 @@ sudo nixos-rebuild switch --flake ~/Documents/NixHub#<name>
 The script doesn't run the rebuild itself, so you get a chance to look over
 what was generated (and add any host-specific config) first.
 
-Note: pushing requires git to already be authenticated against GitHub (via
-`gh auth login` or an SSH key) - on a genuinely first-ever machine, before
-this repo's own home-manager config (which sets up the `gh` credential
-helper) has ever been applied, that push may fail. If it does, the script
-still leaves you with a local commit; authenticate and push it manually.
+Before scaffolding anything, the script checks `gh auth status` and runs
+`gh auth login` if you're not authenticated yet - this is what the push at
+the end (and any `git push` afterward, before this repo's own home-manager
+config has ever been applied) relies on. If you skip that login prompt (or
+it fails), the script still leaves you with a local commit; authenticate
+and push it manually.
 
 ## Tests
 

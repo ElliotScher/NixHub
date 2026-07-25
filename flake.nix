@@ -56,7 +56,7 @@
 
       packages.${system}.bootstrap = pkgs.writeShellApplication {
         name = "bootstrap";
-        runtimeInputs = [ pkgs.git pkgs.nixos-install-tools ];
+        runtimeInputs = [ pkgs.git pkgs.gh pkgs.nixos-install-tools ];
         text = builtins.readFile ./bootstrap.sh;
       };
 

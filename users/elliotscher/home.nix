@@ -1,5 +1,13 @@
 { config, pkgs, lib, inputs, ... }:
 
+let
+  # The icon ships inside the vscode-wpilib extension's own (versioned)
+  # directory, so its path shifts on every frc-nix update - pull it out by
+  # name at build time instead of hardcoding a path that'll go stale.
+  wpilibIcon = pkgs.runCommand "wpilib-icon.svg" { } ''
+    cp "$(find ${inputs.frc-nix.packages.${pkgs.stdenv.hostPlatform.system}.vscode-wpilib} -name 'wpilib-icon.svg' | head -n1)" "$out"
+  '';
+in
 {
   programs.direnv = lib.mkDefault {
     enable = true;
@@ -67,7 +75,7 @@
     name = "VS Code (FRC)";
     genericName = "Text Editor";
     exec = "env WAYLAND_DISPLAY= code --class=code-frc --profile frc -n";
-    icon = "/home/elliotscher/.local/share/icons/wpilib-icon.svg";
+    icon = "${wpilibIcon}";
     comment = "VS Code with FRC WPILib tools and extensions";
     categories = [ "Utility" "TextEditor" "Development" "IDE" ];
     mimeType = [ "text/plain" ];
