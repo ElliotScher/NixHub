@@ -39,6 +39,10 @@
           pkgs.libxcb-image
           pkgs.libxcb-keysyms
           pkgs.libxcb-render-util
+          # Pyinstaller Deps
+          pkgs.libkrb5
+          pkgs.brotli
+          pkgs.libGL
         ];
       });
 
