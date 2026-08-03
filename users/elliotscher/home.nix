@@ -7,6 +7,11 @@ let
   wpilibIcon = pkgs.runCommand "wpilib-icon.svg" { } ''
     cp "$(find ${inputs.frc-nix.packages.${pkgs.stdenv.hostPlatform.system}.vscode-wpilib} -name 'wpilib-icon.svg' | head -n1)" "$out"
   '';
+
+  defaultVscodeExtensions = [
+    pkgs.vscode-extensions.github.vscode-pull-request-github
+    pkgs.vscode-extensions.eamodio.gitlens
+  ];
 in
 {
   programs.direnv = lib.mkDefault {
@@ -48,9 +53,11 @@ in
   programs.vscode = lib.mkDefault {
     enable = true;
     profiles.default = {
-      extensions = [
-        pkgs.vscode-extensions.mkhl.direnv
-      ];
+      extensions = defaultVscodeExtensions;
+      # Extensions here are declaratively pinned via nixpkgs and read-only,
+      # so VSCode's own update prompts can't be acted on anyway - bump
+      # nixpkgs and rebuild to get newer versions instead.
+      enableExtensionUpdateCheck = false;
       userSettings = {
         "window.autoDetectColorScheme" = true;
         "workbench.preferredDarkColorTheme" = "Dark Modern";
@@ -58,15 +65,15 @@ in
       };
     };
     profiles.frc = {
-      extensions = [
+      extensions = defaultVscodeExtensions ++ [
         inputs.frc-nix.packages.${pkgs.stdenv.hostPlatform.system}.vscode-wpilib
-        pkgs.vscode-extensions.mkhl.direnv
+        pkgs.vscode-extensions.vscjava.vscode-java-pack
+        pkgs.vscode-extensions.redhat.java
       ];
       userSettings = {
         "window.autoDetectColorScheme" = true;
         "workbench.preferredDarkColorTheme" = "Dark Modern";
         "workbench.preferredLightColorTheme" = "Default Light Modern";
-        "direnv.restart.automatic" = true;
       };
     };
   };
@@ -263,6 +270,20 @@ in
       mkdir -p "$HOME/Pictures"
       ${pkgs.unzip}/bin/unzip -q ${../common/Backgrounds.zip} -d "$HOME/Pictures"
     fi
+  '';
+
+  # makeVscodeSettingsWritable (below) intentionally turns the settings.json
+  # symlink back into a writable regular file after every activation. That
+  # means the *next* activation's checkLinkTargets step always finds a real
+  # file in the way and tries to move it to a `.backup` sibling - which fails
+  # if a `.backup` from the previous run is still there (checkLinkTargets
+  # runs before writeBoundary, so makeVscodeSettingsWritable never gets a
+  # chance to clean it up first). Clear those backups pre-emptively so
+  # activation never gets stuck failing on itself.
+  home.activation.removeStaleVscodeSettingsBackups = lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
+    run rm -f \
+      "$HOME/.config/Code/User/settings.json.backup" \
+      "$HOME/.config/Code/User/profiles/frc/settings.json.backup"
   '';
 
   home.activation.makeVscodeSettingsWritable = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
