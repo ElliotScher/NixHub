@@ -11,4 +11,10 @@
   # system stall hard under memory pressure before the kernel OOM killer finally
   # steps in. zram gives it fast compressed swap to work with.
   zramSwap.enable = true;
+
+  # GlobalProtect VPN client (gpclient/gpgui), needed to connect to work VPN.
+  services.ayatana-indicators.enable = true;
+  environment.systemPackages = [
+    inputs.globalprotect-openconnect.packages.${pkgs.stdenv.hostPlatform.system}.default
+  ];
 }

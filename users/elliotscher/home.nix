@@ -74,7 +74,7 @@ in
   xdg.desktopEntries.code-frc = lib.mkDefault {
     name = "VS Code (FRC)";
     genericName = "Text Editor";
-    exec = "env WAYLAND_DISPLAY= code --class=code-frc --profile frc -n";
+    exec = "code --class=code-frc --profile frc -n";
     icon = "${wpilibIcon}";
     comment = "VS Code with FRC WPILib tools and extensions";
     categories = [ "Utility" "TextEditor" "Development" "IDE" ];
