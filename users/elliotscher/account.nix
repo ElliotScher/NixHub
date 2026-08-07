@@ -36,7 +36,19 @@
       spotify
 
       jetbrains-toolbox
-      jetbrains.clion
+      # jetbrains.clion is wrapped below: its bundled C/C++ tooling (ninja,
+      # clangd, gdb, lldb, clang-tidy) ships prelinked against gcc's libgcc
+      # RPATH only, missing libstdc++.so.6, so those subprocesses fail to
+      # launch ("full functionality will be available after restart").
+      (symlinkJoin {
+        name = "clion";
+        paths = [ jetbrains.clion ];
+        buildInputs = [ makeWrapper ];
+        postBuild = ''
+          wrapProgram $out/bin/clion \
+            --prefix LD_LIBRARY_PATH : "${stdenv.cc.cc.lib}/lib"
+        '';
+      })
       jetbrains.idea
       jetbrains.pycharm
       jetbrains.webstorm
