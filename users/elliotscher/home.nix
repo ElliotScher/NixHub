@@ -8,10 +8,45 @@ let
     cp "$(find ${inputs.frc-nix.packages.${pkgs.stdenv.hostPlatform.system}.vscode-wpilib} -name 'wpilib-icon.svg' | head -n1)" "$out"
   '';
 
+  # The only JDK that's ever a permanent part of this closure - it's
+  # referenced directly (not via the flake below) purely to host
+  # redhat.java's language server, which needs Java 21+ just to run,
+  # independent of whatever JDK the open project actually builds with.
+  # Shared by both FRC profiles below.
+  frcJdk21 = pkgs.jdk21;
+
+  # JDK 17 (roboRIO) and JDK 25 (SystemCore) are NOT referenced here at all -
+  # they exist only as devshells in this flake, so Nix only builds/fetches
+  # whichever one a given launcher actually enters, rather than keeping
+  # both permanently installed.
+  frcRobotCodeFlake = "/home/elliotscher/Documents/NixHub/dev/FRC/FRC_190/Robot_Code";
+
+  # Two separate profiles/launchers (roboRIO vs SystemCore), each wrapping
+  # its own fixed devshell, rather than one profile with a runtime
+  # switch: VS Code enforces a single running instance *per profile*, so a
+  # single shared profile can't have two simultaneously-open windows with
+  # different real environments anyway - a second launch would just open a
+  # window in the first one's already-running process, silently ignoring
+  # whichever JDK the second launch tried to select. Separate profiles give
+  # separate single-instance locks, so both can genuinely be open at once,
+  # each with only its own JDK (17 or 25) ever reachable - JDK 21 is never
+  # part of either devshell, so neither can build using it.
+  mkFrcCodeLauncher = devShellAttr: pkgs.writeShellScript "code-frc-${devShellAttr}-launcher" ''
+    exec ${pkgs.nix}/bin/nix develop "${frcRobotCodeFlake}#${devShellAttr}" --command code --class=code-frc-${devShellAttr} --profile frc-${devShellAttr} -n
+  '';
+
   defaultVscodeExtensions = [
     pkgs.vscode-extensions.github.vscode-pull-request-github
     pkgs.vscode-extensions.eamodio.gitlens
   ];
+
+  defaultVscodeUserSettings = {
+    "window.autoDetectColorScheme" = true;
+    "workbench.preferredDarkColorTheme" = "Dark Modern";
+    "workbench.preferredLightColorTheme" = "Default Light Modern";
+    "editor.hover.enabled" = true;
+    "editor.hover.delay" = 500;
+  };
 in
 {
   programs.direnv = lib.mkDefault {
@@ -58,36 +93,60 @@ in
       # so VSCode's own update prompts can't be acted on anyway - bump
       # nixpkgs and rebuild to get newer versions instead.
       enableExtensionUpdateCheck = false;
-      userSettings = {
-        "window.autoDetectColorScheme" = true;
-        "workbench.preferredDarkColorTheme" = "Dark Modern";
-        "workbench.preferredLightColorTheme" = "Default Light Modern";
-      };
+      userSettings = defaultVscodeUserSettings;
     };
-    profiles.frc = {
+    profiles.frc-roborio = {
       extensions = defaultVscodeExtensions ++ [
         inputs.frc-nix.packages.${pkgs.stdenv.hostPlatform.system}.vscode-wpilib
         pkgs.vscode-extensions.vscjava.vscode-java-pack
         pkgs.vscode-extensions.redhat.java
       ];
-      userSettings = {
-        "window.autoDetectColorScheme" = true;
-        "workbench.preferredDarkColorTheme" = "Dark Modern";
-        "workbench.preferredLightColorTheme" = "Default Light Modern";
+      userSettings = defaultVscodeUserSettings // {
+        # redhat.java's language server needs Java 21+ just to run, separate
+        # from whatever JDK the open project actually builds with (17 here,
+        # provided by this profile's wrapped launcher's real process
+        # environment, not by a static setting - so it's never a permanent
+        # part of this closure).
+        "java.jdt.ls.java.home" = "${frcJdk21.home}";
+      };
+    };
+    profiles.frc-systemcore = {
+      extensions = defaultVscodeExtensions ++ [
+        inputs.frc-nix.packages.${pkgs.stdenv.hostPlatform.system}.vscode-wpilib
+        pkgs.vscode-extensions.vscjava.vscode-java-pack
+        pkgs.vscode-extensions.redhat.java
+      ];
+      userSettings = defaultVscodeUserSettings // {
+        # Same rationale as frc-roborio above, just for the SystemCore
+        # (JDK 25) devshell instead of roboRIO's (JDK 17).
+        "java.jdt.ls.java.home" = "${frcJdk21.home}";
       };
     };
   };
 
-  xdg.desktopEntries.code-frc = lib.mkDefault {
-    name = "VS Code (FRC)";
+  xdg.desktopEntries.code-frc-roborio = lib.mkDefault {
+    name = "VS Code (FRC RoboRIO)";
     genericName = "Text Editor";
-    exec = "code --class=code-frc --profile frc -n";
+    exec = "${mkFrcCodeLauncher "roborio"}";
     icon = "${wpilibIcon}";
-    comment = "VS Code with FRC WPILib tools and extensions";
+    comment = "VS Code with FRC WPILib tools and extensions, for roboRIO (JDK 17) robot code";
     categories = [ "Utility" "TextEditor" "Development" "IDE" ];
     mimeType = [ "text/plain" ];
     settings = {
-      StartupWMClass = "code-frc";
+      StartupWMClass = "code-frc-roborio";
+    };
+  };
+
+  xdg.desktopEntries.code-frc-systemcore = lib.mkDefault {
+    name = "VS Code (FRC SystemCore)";
+    genericName = "Text Editor";
+    exec = "${mkFrcCodeLauncher "systemcore"}";
+    icon = "${wpilibIcon}";
+    comment = "VS Code with FRC WPILib tools and extensions, for SystemCore (JDK 25) robot code";
+    categories = [ "Utility" "TextEditor" "Development" "IDE" ];
+    mimeType = [ "text/plain" ];
+    settings = {
+      StartupWMClass = "code-frc-systemcore";
     };
   };
 
@@ -118,7 +177,8 @@ in
         "discord.desktop"
         "spotify.desktop"
         "code.desktop"
-        "code-frc.desktop"
+        "code-frc-roborio.desktop"
+        "code-frc-systemcore.desktop"
         "advantagescope.desktop"
         "elastic-dashboard.desktop"
         "choreo.desktop"
@@ -283,23 +343,23 @@ in
   home.activation.removeStaleVscodeSettingsBackups = lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
     run rm -f \
       "$HOME/.config/Code/User/settings.json.backup" \
-      "$HOME/.config/Code/User/profiles/frc/settings.json.backup"
+      "$HOME/.config/Code/User/profiles/frc-roborio/settings.json.backup" \
+      "$HOME/.config/Code/User/profiles/frc-systemcore/settings.json.backup"
   '';
 
   home.activation.makeVscodeSettingsWritable = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    if [ -L "$HOME/.config/Code/User/settings.json" ]; then
-      target=$(readlink "$HOME/.config/Code/User/settings.json")
-      rm "$HOME/.config/Code/User/settings.json"
-      cp "$target" "$HOME/.config/Code/User/settings.json"
-      chmod u+w "$HOME/.config/Code/User/settings.json"
-    fi
-
-    if [ -L "$HOME/.config/Code/User/profiles/frc/settings.json" ]; then
-      target=$(readlink "$HOME/.config/Code/User/profiles/frc/settings.json")
-      rm "$HOME/.config/Code/User/profiles/frc/settings.json"
-      cp "$target" "$HOME/.config/Code/User/profiles/frc/settings.json"
-      chmod u+w "$HOME/.config/Code/User/profiles/frc/settings.json"
-    fi
+    for settings in \
+      "$HOME/.config/Code/User/settings.json" \
+      "$HOME/.config/Code/User/profiles/frc-roborio/settings.json" \
+      "$HOME/.config/Code/User/profiles/frc-systemcore/settings.json"
+    do
+      if [ -L "$settings" ]; then
+        target=$(readlink "$settings")
+        rm "$settings"
+        cp "$target" "$settings"
+        chmod u+w "$settings"
+      fi
+    done
   '';
 
 }
