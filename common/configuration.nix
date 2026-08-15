@@ -27,6 +27,9 @@
   boot.loader.grub.efiSupport = lib.mkDefault true;
   boot.loader.grub.device = lib.mkDefault "nodev";
   boot.loader.grub.useOSProber = lib.mkDefault true;
+  boot.loader.grub.theme = lib.mkDefault (pkgs.callPackage ./grub-theme-mr-robot.nix { });
+  boot.loader.grub.gfxmodeEfi = lib.mkDefault "1920x1080";
+  boot.loader.grub.gfxmodeBios = lib.mkDefault "1920x1080";
   boot.loader.efi.canTouchEfiVariables = lib.mkDefault true;
 
   # ---------------------------
