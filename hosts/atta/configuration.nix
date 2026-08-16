@@ -15,6 +15,18 @@
   # GlobalProtect VPN client (gpclient/gpgui), needed to connect to work VPN.
   services.ayatana-indicators.enable = true;
   environment.systemPackages = [
+    pkgs.qemu
+    pkgs.virt-viewer
+    # nixpkgs pins osinfo-db to a snapshot date, so new distro releases (e.g.
+    # Ubuntu 26.04) are missing from virt-manager's OS dropdown until it's
+    # refreshed: `osinfo-db-import --user --latest`.
+    pkgs.osinfo-db-tools
     inputs.globalprotect-openconnect.packages.${pkgs.stdenv.hostPlatform.system}.default
   ];
+
+  # KVM/QEMU virtualisation via libvirtd, managed through virt-manager (GUI)
+  # or virsh/virt-install (CLI).
+  virtualisation.libvirtd.enable = true;
+  programs.virt-manager.enable = true;
+  users.users.elliotscher.extraGroups = [ "libvirtd" ];
 }
