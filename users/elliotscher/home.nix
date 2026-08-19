@@ -4,9 +4,13 @@ let
   # The icon ships inside the vscode-wpilib extension's own (versioned)
   # directory, so its path shifts on every frc-nix update - pull it out by
   # name at build time instead of hardcoding a path that'll go stale.
-  wpilibIcon = pkgs.runCommand "wpilib-icon.svg" { } ''
-    cp "$(find ${inputs.frc-nix.packages.${pkgs.stdenv.hostPlatform.system}.vscode-wpilib} -name 'wpilib-icon.svg' | head -n1)" "$out"
+  # roboRIO stays on the stable frc-nix input; SystemCore tracks the alpha
+  # (2027) input, so each needs its own icon pulled from its own extension.
+  mkWpilibIcon = frcNixInput: pkgs.runCommand "wpilib-icon.svg" { } ''
+    cp "$(find ${frcNixInput.packages.${pkgs.stdenv.hostPlatform.system}.vscode-wpilib} -name 'wpilib-icon.svg' | head -n1)" "$out"
   '';
+  wpilibIconRoborio = mkWpilibIcon inputs.frc-nix;
+  wpilibIconSystemcore = mkWpilibIcon inputs.frc-nix-alpha;
 
   # The only JDK that's ever a permanent part of this closure - it's
   # referenced directly (not via the flake below) purely to host
@@ -31,13 +35,32 @@ let
   # separate single-instance locks, so both can genuinely be open at once,
   # each with only its own JDK (17 or 25) ever reachable - JDK 21 is never
   # part of either devshell, so neither can build using it.
+  #
+  # vscode-gradle picks the JVM for its Gradle daemon by checking, in order,
+  # java.import.gradle.java.home, then java.jdt.ls.java.home, then java.home
+  # - it never looks at $JAVA_HOME at all. Since java.jdt.ls.java.home is
+  # always JDK 21 (below), leaving java.import.gradle.java.home unset means
+  # the daemon runs on 21, which then can't satisfy either project's
+  # toolchain (languageVersion 17/25) and fails to import - breaking hover
+  # and semantic highlighting along with the build. Pointing that setting at
+  # a real JDK 17/25 store path directly would pin both permanently into
+  # this closure, so instead each launcher rewrites a stable symlink to
+  # $JAVA_HOME (set by the devshell it just entered) before handing off to
+  # `code` - the Nix-declared setting below is a fixed path, but its target
+  # is only ever whichever JDK that devshell already fetched on demand.
+  frcGradleJavaHomeDir = "${config.home.homeDirectory}/.cache/frc-vscode";
+  frcGradleJavaHomeLink = devShellAttr: "${frcGradleJavaHomeDir}/gradle-java-home-${devShellAttr}";
+
   mkFrcCodeLauncher = devShellAttr: pkgs.writeShellScript "code-frc-${devShellAttr}-launcher" ''
-    exec ${pkgs.nix}/bin/nix develop "${frcRobotCodeFlake}#${devShellAttr}" --command code --class=code-frc-${devShellAttr} --profile frc-${devShellAttr} -n
+    exec ${pkgs.nix}/bin/nix develop "${frcRobotCodeFlake}#${devShellAttr}" --command bash -c '
+      mkdir -p "${frcGradleJavaHomeDir}"
+      ln -sfn "$JAVA_HOME" "${frcGradleJavaHomeLink devShellAttr}"
+      exec code --class=code-frc-${devShellAttr} --profile frc-${devShellAttr} -n
+    '
   '';
 
   defaultVscodeExtensions = [
     pkgs.vscode-extensions.github.vscode-pull-request-github
-    pkgs.vscode-extensions.eamodio.gitlens
   ];
 
   defaultVscodeUserSettings = {
@@ -46,6 +69,28 @@ let
     "workbench.preferredLightColorTheme" = "Default Light Modern";
     "editor.hover.enabled" = true;
     "editor.hover.delay" = 500;
+    # Suppress the "Welcome"/"Get Started" tab that otherwise opens on every
+    # new window, and stop extensions (e.g. an update to vscode-java-pack)
+    # from popping their own walkthrough open unprompted.
+    "workbench.startupEditor" = "none";
+    "workbench.tips.enabled" = false;
+    "workbench.welcomePage.walkthroughs.openOnInstall" = false;
+    "extensions.ignoreRecommendations" = true;
+    # The FRC launchers wrap `code` in `nix develop <flake># ...`, which sets
+    # SHELL in the environment it hands to `code` to stdenv.shell - nixpkgs's
+    # minimal, non-interactive bash (no readline), not bashInteractive. VS
+    # Code inherits that env var and uses it to spawn integrated terminals,
+    # so without this override, terminals in those profiles get a bash build
+    # that never strips "\[" "\]" PS1 markers before printing, leaving them
+    # visible in the prompt. Pinning the terminal profile to the system's
+    # real interactive bash sidesteps whatever $SHELL the launching process
+    # happened to inherit.
+    "terminal.integrated.profiles.linux" = {
+      bash = {
+        path = "${pkgs.bashInteractive}/bin/bash";
+      };
+    };
+    "terminal.integrated.defaultProfile.linux" = "bash";
   };
 in
 {
@@ -100,6 +145,7 @@ in
         inputs.frc-nix.packages.${pkgs.stdenv.hostPlatform.system}.vscode-wpilib
         pkgs.vscode-extensions.vscjava.vscode-java-pack
         pkgs.vscode-extensions.redhat.java
+        pkgs.vscode-extensions.vscjava.vscode-gradle
       ];
       userSettings = defaultVscodeUserSettings // {
         # redhat.java's language server needs Java 21+ just to run, separate
@@ -108,18 +154,29 @@ in
         # environment, not by a static setting - so it's never a permanent
         # part of this closure).
         "java.jdt.ls.java.home" = "${frcJdk21.home}";
+        # See mkFrcCodeLauncher's comment above - this must be set
+        # explicitly or vscode-gradle silently runs its daemon on JDK 21
+        # instead, which can't satisfy this project's JDK 17 toolchain.
+        "java.import.gradle.java.home" = frcGradleJavaHomeLink "roborio";
       };
     };
     profiles.frc-systemcore = {
       extensions = defaultVscodeExtensions ++ [
-        inputs.frc-nix.packages.${pkgs.stdenv.hostPlatform.system}.vscode-wpilib
+        # Alpha (2027) build of the WPILib tooling - SystemCore-native,
+        # tracked separately from frc-nix so roboRIO stays on the stable
+        # input regardless of what upstream does to the alpha channel.
+        inputs.frc-nix-alpha.packages.${pkgs.stdenv.hostPlatform.system}.vscode-wpilib
         pkgs.vscode-extensions.vscjava.vscode-java-pack
         pkgs.vscode-extensions.redhat.java
+        pkgs.vscode-extensions.vscjava.vscode-java-debug
+        pkgs.vscode-extensions.ms-vscode.cpptools
+        pkgs.vscode-extensions.vscjava.vscode-gradle
       ];
       userSettings = defaultVscodeUserSettings // {
         # Same rationale as frc-roborio above, just for the SystemCore
         # (JDK 25) devshell instead of roboRIO's (JDK 17).
         "java.jdt.ls.java.home" = "${frcJdk21.home}";
+        "java.import.gradle.java.home" = frcGradleJavaHomeLink "systemcore";
       };
     };
   };
@@ -128,7 +185,7 @@ in
     name = "VS Code (FRC RoboRIO)";
     genericName = "Text Editor";
     exec = "${mkFrcCodeLauncher "roborio"}";
-    icon = "${wpilibIcon}";
+    icon = "${wpilibIconRoborio}";
     comment = "VS Code with FRC WPILib tools and extensions, for roboRIO (JDK 17) robot code";
     categories = [ "Utility" "TextEditor" "Development" "IDE" ];
     mimeType = [ "text/plain" ];
@@ -141,7 +198,7 @@ in
     name = "VS Code (FRC SystemCore)";
     genericName = "Text Editor";
     exec = "${mkFrcCodeLauncher "systemcore"}";
-    icon = "${wpilibIcon}";
+    icon = "${wpilibIconSystemcore}";
     comment = "VS Code with FRC WPILib tools and extensions, for SystemCore (JDK 25) robot code";
     categories = [ "Utility" "TextEditor" "Development" "IDE" ];
     mimeType = [ "text/plain" ];
@@ -196,6 +253,7 @@ in
 
     "org/gnome/desktop/interface" = lib.mkDefault {
       color-scheme = "prefer-dark";
+      accent-color = "green";
 
       enable-hot-corners = true;
 

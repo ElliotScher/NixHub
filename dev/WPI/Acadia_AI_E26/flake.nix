@@ -46,7 +46,7 @@
         ];
       });
 
-      shellBanner = import ../lib/shell-banner.nix;
+      shellBanner = import ../../lib/shell-banner.nix;
     in
     {
       devShells = forEachSystem ({ pkgs, libPath, ... }: rec {

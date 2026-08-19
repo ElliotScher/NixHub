@@ -37,6 +37,23 @@
             pkgs.jdk17
           ];
 
+          # mkShell puts jdk17 on PATH but never sets JAVA_HOME - without it,
+          # vscode-gradle's Gradle Tooling API client falls back to whatever
+          # JDK redhat.java uses to host its own language server (JDK 21,
+          # statically pinned in home.nix), so gradle build/import silently
+          # runs on the wrong JDK. Exporting it here lets `code` (launched
+          # via `nix develop ... --command code`) and everything it spawns
+          # inherit the correct one.
+          env.JAVA_HOME = "${pkgs.jdk17.home}";
+
+          # Gradle only emits its colored "rich" console (progress bars,
+          # colored task status) when it detects stdout is a real terminal.
+          # The WPILib/Gradle VS Code extensions run gradlew through a plain
+          # pipe rather than a pty for their build/deploy tasks, so that
+          # autodetection falls back to plain text - forcing rich mode here
+          # restores the colored output those extensions inherit via `code`.
+          env.GRADLE_OPTS = "-Dorg.gradle.console=rich";
+
           shellHook = ''
             ${shellBanner {
               title = "Welcome to the FRC 190 RoboRIO Development Environment";
@@ -58,6 +75,13 @@
           packages = [
             pkgs.jdk25
           ];
+
+          # See the roborio shell's env.JAVA_HOME comment above - same
+          # rationale, just for JDK 25.
+          env.JAVA_HOME = "${pkgs.jdk25.home}";
+
+          # See the roborio shell's env.GRADLE_OPTS comment above.
+          env.GRADLE_OPTS = "-Dorg.gradle.console=rich";
 
           shellHook = ''
             ${shellBanner {

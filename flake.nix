@@ -12,6 +12,7 @@
     antigravity-cli-nix.url = "github:bigFin/antigravity-cli-nix";
     claude-code-nix.url = "github:sadjow/claude-code-nix";
     frc-nix.url = "github:frc4451/frc-nix";
+    frc-nix-alpha.url = "github:ElliotScher/frc-nix";
     globalprotect-openconnect.url = "github:yuezk/GlobalProtect-openconnect";
   };
 

@@ -68,10 +68,22 @@
         "dash-to-dock@micxgx.gmail.com"
         "appindicatorsupport@rgcjonas.gmail.com"
         "gsconnect@andyholmes.github.io"
+        "live-lockscreen@nick-redwill"
       ];
       locks = [ "/org/gnome/shell/enabled-extensions" ];
     }
   ];
+
+  # gnomeExtensions.live-lock-screen renders video through the GStreamer
+  # element gtk4paintablesink, which lives in gst-plugins-rs - a package
+  # GNOME Shell's own build doesn't bundle (it only wraps itself with
+  # gst-plugins-base/good). PAM sources /etc/set-environment into every
+  # session on NixOS, including GDM's, so exposing the plugin path here makes
+  # it visible system-wide; gnome-shell's wrapper then prefixes its own
+  # GST_PLUGIN_SYSTEM_PATH_1_0 onto whatever's already in the environment, so
+  # both plugin sets end up on the combined search path.
+  environment.variables.GST_PLUGIN_SYSTEM_PATH_1_0 =
+    lib.mkDefault "${pkgs.gst_all_1.gst-plugins-rs}/lib/gstreamer-1.0";
 
   # ---------------------------
   # Keyboard layout
@@ -119,6 +131,40 @@
     gnome-tweaks
     gnome-extension-manager
     fprintd
+
+    # gnomeExtensions.live-lock-screen spawns a helper process ("gjs -m
+    # .../external/run.js") to actually decode and render the video - a
+    # separate process from GNOME Shell itself, found by searching $PATH for
+    # a plain "gjs", which NixOS doesn't provide by default. That bare gjs
+    # also has no way to find GTK4's or GStreamer's typelibs, or GStreamer's
+    # plugins, since those are normally baked into an app's wrapper at build
+    # time. Build that wrapper ourselves the same way nixpkgs would for any
+    # other GTK4 app - listing the needed libraries as buildInputs lets their
+    # setup hooks populate GI_TYPELIB_PATH/GST_PLUGIN_SYSTEM_PATH_1_0, which
+    # gets captured into the wrapper - and put the result on $PATH as the
+    # only "gjs" available.
+    (symlinkJoin {
+      name = "gjs-with-gtk4-gst";
+      paths = [ gjs ];
+      buildInputs = [
+        makeWrapper
+        gobject-introspection
+        gtk4
+      ] ++ (with gst_all_1; [
+        gstreamer
+        gst-plugins-base
+        gst-plugins-good
+        gst-plugins-bad
+        gst-plugins-ugly
+        gst-libav
+        gst-plugins-rs
+      ]);
+      postBuild = ''
+        wrapProgram $out/bin/gjs \
+          --set GI_TYPELIB_PATH "$GI_TYPELIB_PATH" \
+          --set GST_PLUGIN_SYSTEM_PATH_1_0 "$GST_PLUGIN_SYSTEM_PATH_1_0"
+      '';
+    })
   ];
 
   # ---------------------------

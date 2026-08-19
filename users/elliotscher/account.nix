@@ -56,6 +56,7 @@
       gnomeExtensions.dash-to-dock
       gnomeExtensions.appindicator
       gnomeExtensions.gsconnect
+      gnomeExtensions.live-lock-screen
 
       # FRC packages (from local frc-nix flake)
       inputs.frc-nix.packages.${pkgs.stdenv.hostPlatform.system}.advantagescope
