@@ -32,6 +32,7 @@
                     # package, not `out` (which holds the actual
                     # ament_cmake_coreConfig.cmake), so find_package() fails
                     # without it explicitly listed here.
+                 turtlesim
                 ];
               })
             ];
