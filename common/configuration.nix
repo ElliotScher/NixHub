@@ -7,6 +7,18 @@
   nix.settings.experimental-features = lib.mkDefault [ "nix-command" "flakes" ];
   nix.settings.auto-optimise-store = lib.mkDefault true;
 
+  # Trust elliotscher (and root) to supply extra-substituters /
+  # extra-trusted-public-keys via a flake's `nixConfig` (e.g. project flakes
+  # pulling from ros.cachix.org) without an interactive per-shell prompt, and
+  # without Nix silently ignoring the setting because the invoking user is
+  # untrusted.
+  #
+  # mkForce, not mkDefault: upstream's own nix.nix module sets this list via
+  # a plain (priority-100) assignment, which already beats mkDefault
+  # (priority 1000) outright - a plain assignment here would only get merged
+  # in via list concatenation, not reliably override it.
+  nix.settings.trusted-users = lib.mkForce [ "root" "elliotscher" ];
+
   # NOTE: allowUnfree is set when pkgs is constructed in flake.nix, not here -
   # setting nixpkgs.config/overlays as a module option is deprecated once
   # home-manager.useGlobalPkgs is enabled.

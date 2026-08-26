@@ -36,13 +36,13 @@
         ];
       });
 
-      shellBanner = import ../lib/shell-banner.nix;
+      shellBanner = import ../../lib/shell-banner.nix;
     in
     {
       devShells = forEachSystem ({ pkgs, tauriLibs, ... }: rec {
         # Environment for the Claude Code History Viewer project (Tauri + React)
         claude-code-history-viewer = pkgs.mkShell {
-          name = "claude-code-history-viewer-env";
+          name = "claude-code-history-viewer";
 
           nativeBuildInputs = [
             pkgs.pkg-config

@@ -24,7 +24,7 @@
       devShells = forEachSystem ({ pkgs, ... }: rec {
         # Environment for the 190 Software Knowledge Base docs site
         knowledge-base = pkgs.mkShell {
-          name = "190-software-knowledge-base-env";
+          name = "190-software-knowledge-base";
 
           packages = [
             pkgs.nodejs_22

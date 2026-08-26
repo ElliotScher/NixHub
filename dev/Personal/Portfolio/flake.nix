@@ -18,13 +18,13 @@
         };
       });
 
-      shellBanner = import ../lib/shell-banner.nix;
+      shellBanner = import ../../lib/shell-banner.nix;
     in
     {
       devShells = forEachSystem ({ pkgs, ... }: rec {
         # Environment for the Portfolio project
         portfolio = pkgs.mkShell {
-          name = "portfolio-env";
+          name = "portfolio";
 
           packages = [
             pkgs.nodejs_22

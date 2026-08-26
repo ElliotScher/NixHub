@@ -16,7 +16,7 @@
           inherit system;
           config.allowUnfree = true; # Allow unfree packages if needed
         };
-        
+
         # Library path for PyPI wheels on NixOS (includes X11, GL, DBus, and Qt6 dependencies)
         libPath = pkgs.lib.makeLibraryPath [
           pkgs.stdenv.cc.cc
@@ -51,8 +51,8 @@
     {
       devShells = forEachSystem ({ pkgs, libPath, ... }: rec {
         # Environment for the Acadia AI project
-        acadia-ai = pkgs.mkShell {
-          name = "acadia-ai-e26-env";
+        acadia-ai-e26 = pkgs.mkShell {
+          name = "acadia-ai-e26";
 
           packages = [
             pkgs.python3
@@ -116,7 +116,7 @@
             echo "$BAR"
           '';
         };
-        default = acadia-ai;
+        default = acadia-ai-e26;
       });
     };
 }

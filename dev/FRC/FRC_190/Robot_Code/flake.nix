@@ -31,7 +31,7 @@
       devShells = forEachSystem ({ pkgs, ... }: rec {
         # roboRIO-based robot code (2k26 and earlier)
         roborio = pkgs.mkShell {
-          name = "frc-190-roborio-nix";
+          name = "frc-190-roborio";
 
           packages = [
             pkgs.jdk17
@@ -70,7 +70,7 @@
 
         # SystemCore-based robot code
         systemcore = pkgs.mkShell {
-          name = "frc-190-systemcore-nix";
+          name = "frc-190-systemcore";
 
           packages = [
             pkgs.jdk25

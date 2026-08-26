@@ -28,5 +28,10 @@
   # or virsh/virt-install (CLI).
   virtualisation.libvirtd.enable = true;
   programs.virt-manager.enable = true;
-  users.users.elliotscher.extraGroups = [ "libvirtd" ];
+
+  # "dialout" grants access to serial/USB TTY devices (/dev/ttyUSB*,
+  # /dev/ttyACM*) - needed for ROS2 robotics hardware (microcontrollers,
+  # LIDAR, etc). On Ubuntu this is normally `sudo usermod -aG dialout $USER`;
+  # on NixOS it has to go through extraGroups + a rebuild instead.
+  users.users.elliotscher.extraGroups = [ "libvirtd" "dialout" ];
 }
