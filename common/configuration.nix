@@ -197,6 +197,25 @@
   environment.shellAliases.fuck = lib.mkDefault "echo \"Fuck This Shit, Rebooting\" && sudo reboot now";
   environment.shellAliases.fuckoff = lib.mkDefault "echo \"Fuck This Shit, I'm Out\" && sudo shutdown now";
 
+  # One alias per development flake under dev/ (e.g. `RBE_4540` runs
+  # `nix develop /home/elliotscher/Documents/NixHub/dev/WPI/RBE_4540`),
+  # discovered by recursing dev/ for flake.nix files rather than hand-listed
+  # here - a new dev/ flake gets its alias automatically on the next
+  # `nixos-rebuild switch`. See lib/dev-flake-aliases.nix.
+  #
+  # Each alias is its own single-key module in `imports`, not one
+  # `environment.shellAliases = { ... }` blob, to match the per-key
+  # mkDefault pattern above exactly (see the NOTE at the top of this
+  # section) - `imports` merges every module's config the same way separate
+  # top-level assignments would.
+  imports = lib.mapAttrsToList
+    (name: value: { environment.shellAliases.${name} = lib.mkDefault value; })
+    (import ../lib/dev-flake-aliases.nix {
+      inherit lib;
+      devDir = ../dev;
+      devRoot = "/home/elliotscher/Documents/NixHub/dev";
+    });
+
   # ---------------------------
   # System version
   # ---------------------------

@@ -40,6 +40,25 @@
         };
 
         shellBanner = import ../../lib/shell-banner.nix;
+
+        # Qt5 plugin search path (platforms/xcb, wayland, svg icons, ...)
+        # for any Qt5 GUI node built locally in a workspace (e.g. a
+        # colcon-rebuilt turtlesim_node, following the "modifying
+        # turtlesim" tutorial). A prebuilt Nix package like
+        # rosPackages.jazzy.turtlesim gets this baked into its own
+        # `makeCWrapper`-generated executable at build time via
+        # `wrapQtAppsHook`, but a plain colcon/cmake build has no such
+        # wrapping - without QT_PLUGIN_PATH set in the environment it runs
+        # in, Qt can't find the "xcb" platform plugin and aborts on
+        # startup. Same qt5 packages and relative plugin prefix
+        # (`qtPluginPrefix`) that wrapQtAppsHook itself would use.
+        qt5PluginPath = pkgs.lib.concatMapStringsSep ":"
+          (pkg: "${pkg}/${pkgs.qt5.qtbase.qtPluginPrefix}") [
+            pkgs.qt5.qtbase
+            pkgs.qt5.qtsvg.bin
+            pkgs.qt5.qtdeclarative.bin
+            pkgs.qt5.qtwayland.bin
+          ];
       in {
         devShells = rec {
           rbe-4540-ros2 = pkgs.mkShell {
@@ -48,6 +67,10 @@
               pkgs.neovim
               pkgs.colcon
               pkgsPlain.python3Packages.colcon-cd
+              pkgs.eigen # the actual Eigen3 headers - a plain nixpkgs
+                # library, not a ROS package, so it isn't in rosPackages.jazzy
+                # at all. Needed by any node that does `#include <Eigen/...>`
+                # (e.g. custom_cpp_srvcli's grasp-matrix server).
               (with pkgs.rosPackages.jazzy; buildEnv {
                 paths = [
                   desktop # ros-base + rviz2 + rqt + demos/tutorials
@@ -62,6 +85,13 @@
                   python-cmake-module # needed at CMake configure time by
                     # rosidl_generate_interfaces (e.g. turtlesim's own .msg/
                     # .srv), but not pulled in transitively by `desktop`.
+                  eigen3-cmake-module # ament/CMake glue package (rosdep key
+                    # `eigen3_cmake_module`) that provides an
+                    # ament_cmake-compatible Eigen3Config.cmake wrapping the
+                    # plain `pkgs.eigen` above - required by any package
+                    # whose CMakeLists.txt does
+                    # `find_package(eigen3_cmake_module REQUIRED)` +
+                    # `find_package(Eigen3 REQUIRED)`.
                  turtlesim
                 ];
               })
@@ -72,6 +102,15 @@
               # perms - handy since NixOS grants /dev/ttyUSB*, /dev/ttyACM*
               # access via a system-level group (see below), not a package.
               alias lsdev="ls -l /dev/ttyUSB* /dev/ttyACM* 2>/dev/null"
+
+              # Snapshot of the env vars a workspace overlay touches, taken
+              # before any workspace is sourced - so switching between
+              # workspaces later can restore this baseline first instead of
+              # stacking one workspace's overlay on top of another's.
+              for _v in AMENT_PREFIX_PATH CMAKE_PREFIX_PATH PATH PYTHONPATH LD_LIBRARY_PATH PKG_CONFIG_PATH; do
+                export "_ros_pristine_$_v=''${!_v}"
+              done
+              unset _v
 
               # colcon_cd: the shell function itself, plus its bash tab
               # completion, and colcon's own bash tab completion
@@ -89,6 +128,11 @@
               # `update` writing state into ~/.colcon.
               export COLCON_MIXIN_PATH="${colconMixinRepo}"
 
+              # See qt5PluginPath above - lets a locally-built Qt5 GUI node
+              # (turtlesim_node and friends) find its platform/svg/wayland
+              # plugins at runtime, same as a Nix-packaged one already can.
+              export QT_PLUGIN_PATH="${qt5PluginPath}"
+
               # Prompt for the domain ID each time, defaulting to 42 on a
               # bare Enter - or falling back silently when stdin isn't a
               # terminal (e.g. `nix develop -c <cmd>`), since read has
@@ -105,6 +149,9 @@
                 title = "Welcome to the RBE 4540 ROS 2 (Jazzy) Development Environment";
                 subtitle = "desktop + rviz2 + rqt + colcon";
               }}
+              export -f center # so it's still usable from _ros_ws_autosource
+                # below when that runs in a child shell (e.g. `nix develop -c
+                # bash -c '...'`), not just this same interactive process.
               center "ROS_DOMAIN_ID: $ROS_DOMAIN_ID"
               echo ""
 
@@ -121,18 +168,105 @@
                 center "host's NixOS configuration.nix, then rebuild+switch."
               fi
 
-              # Auto-source the workspace overlay so locally-built packages are
-              # on the path without a manual `source install/setup.bash` every
-              # time. Only runs once at shell entry, so re-`source` (or re-enter
-              # the shell) after a `colcon build` that creates install/ for the
-              # first time.
-              echo ""
-              if [ -f install/setup.bash ]; then
-                source install/setup.bash
-                center "Sourced install/setup.bash"
+              # `ros2` is a Nix-generated wrapper that unconditionally
+              # re-prepends this environment's AMENT_PREFIX_PATH (and
+              # PYTHONPATH/PATH/CMAKE_PREFIX_PATH/...) ahead of whatever a
+              # sourced workspace overlay already exported, on every
+              # invocation. So `ros2 run`/`ros2 pkg` can never see a
+              # locally-rebuilt package that shares a name with one already
+              # in this shell (e.g. rebuilding turtlesim in a *_ws to
+              # follow the "modifying turtlesim" tutorial) - the
+              # Nix-provided one always wins, silently.
+              #
+              # The wrapper's real Python entry point underneath - the file
+              # nixpkgs' `makeWrapper` conventionally names
+              # `.<executable-name>-wrapped`, sitting next to the wrapper
+              # script in the same output - does no such re-prepending
+              # itself; it only extends sys.path for its own dependencies.
+              # Calling that directly skips just the offending step and
+              # nothing else (ROS_DOMAIN_ID, RMW config, etc. are
+              # untouched), so a local overlay's package correctly takes
+              # priority.
+              #
+              # CAVEAT: `.<name>-wrapped` is a private nixpkgs
+              # implementation convention, not a public API - it has been
+              # stable for years, but a future nix-ros-overlay/nixpkgs
+              # update could change it. The check below verifies the file
+              # exists before relying on it, and falls back to the normal
+              # (shadowing-prone) `ros2` with an explicit warning instead
+              # of failing silently if that ever happens.
+              _ros2cli_inner="${pkgs.rosPackages.jazzy.ros2cli}/bin/.ros2-wrapped"
+              if [ -x "$_ros2cli_inner" ]; then
+                ros2() { "${pkgs.rosPackages.jazzy.ros2cli}/bin/.ros2-wrapped" "$@"; }
+                export -f ros2
               else
-                center "No install/setup.bash yet - run 'colcon build --symlink-install'"
+                center "WARNING: ros2's unwrapped entry point was not"
+                center "found at the expected path - nixpkgs' internal"
+                center "wrapper naming convention likely changed."
+                center "'ros2 run'/'ros2 pkg' will now NOT see"
+                center "locally-rebuilt packages that share a name with"
+                center "one already in this shell (e.g. an overlaid"
+                center "turtlesim) - the Nix-provided one will silently"
+                center "win instead."
+                center "Workaround: run the built executable directly,"
+                center "e.g. ./install/<pkg>/lib/<pkg>/<node>, after"
+                center "sourcing install/setup.bash."
+                center "To fix: find the new unwrapped entry point (check"
+                center "\$(dirname \$(readlink -f \$(command -v ros2)))"
+                center "for a hidden file next to ros2) and update"
+                center "_ros2cli_inner in this flake's shellHook."
               fi
+              unset _ros2cli_inner
+              echo ""
+
+              # Auto-source a workspace overlay (install/setup.bash, falling
+              # back to install/local_setup.bash) whenever $PWD is a
+              # directory ending in `_ws` - not just at shell entry, but on
+              # every `cd`, via PROMPT_COMMAND, so hopping between different
+              # assignments' workspaces in one shell just works. Each switch
+              # restores the pristine snapshot from above first, so unrelated
+              # workspaces' overlays don't stack on top of each other.
+              echo ""
+              _ros_ws_autosource() {
+                [ "$PWD" = "''${_ros_ws_last_pwd:-}" ] && return
+                _ros_ws_last_pwd="$PWD"
+
+                local _v _pv
+                for _v in AMENT_PREFIX_PATH CMAKE_PREFIX_PATH PATH PYTHONPATH LD_LIBRARY_PATH PKG_CONFIG_PATH; do
+                  _pv="_ros_pristine_$_v"
+                  export "$_v=''${!_pv}"
+                done
+
+                case "$PWD" in
+                  *_ws)
+                    center "Workspace detected - sourcing its overlay..."
+                    if [ -f install/setup.bash ]; then
+                      if source install/setup.bash; then
+                        center "Sourced $PWD/install/setup.bash"
+                      else
+                        center "install/setup.bash failed - build it with"
+                        center "'colcon build --symlink-install', then source"
+                        center "it manually with 'source install/setup.bash'"
+                      fi
+                    elif [ -f install/local_setup.bash ]; then
+                      if source install/local_setup.bash; then
+                        center "Sourced $PWD/install/local_setup.bash"
+                      else
+                        center "install/local_setup.bash failed - build it with"
+                        center "'colcon build --symlink-install', then source it"
+                        center "manually with 'source install/local_setup.bash'"
+                      fi
+                    else
+                      center "No install/setup.bash yet - build it with"
+                      center "'colcon build --symlink-install', then source it"
+                      center "manually with 'source install/setup.bash'"
+                    fi
+                    ;;
+                esac
+              }
+              export -f _ros_ws_autosource
+              PROMPT_COMMAND="_ros_ws_autosource''${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+              _ros_ws_autosource
 
               # rviz2 needs no nixGL/OpenGL wrapper here: NixOS wires up
               # /run/opengl-driver system-wide, unlike plain Ubuntu+Nix setups.
@@ -143,6 +277,7 @@
               center "lsdev   (list connected serial/USB robot hardware)"
               center "colcon_cd <pkg>   (cd into a package, tab-completes)"
               center "colcon build --mixin release   (or debug, ccache, ...)"
+              center "cd into any *_ws dir - its overlay auto-sources"
               echo "$BAR"
             '';
           };
