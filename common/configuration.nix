@@ -23,8 +23,13 @@
   # setting nixpkgs.config/overlays as a module option is deprecated once
   # home-manager.useGlobalPkgs is enabled.
 
-  # Enable nix-ld to run pre-compiled Gradle/wpilib binaries dynamically
+  # Enable nix-ld to run pre-compiled Gradle/wpilib binaries dynamically.
+  # libraries: mesa + libglvnd cover OpenGL/GLX for WPILib's halsim_gui
+  # extension (the sim GUI) - without them GLFW fails with
+  # "GLX: Failed to load GLX" since the default nix-ld library set doesn't
+  # include the graphics stack.
   programs.nix-ld.enable = lib.mkDefault true;
+  programs.nix-ld.libraries = lib.mkOverride 100 [ pkgs.mesa pkgs.libglvnd ];
 
   nix.gc = lib.mkDefault {
     automatic = true;

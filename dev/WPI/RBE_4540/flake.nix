@@ -93,6 +93,43 @@
                     # `find_package(eigen3_cmake_module REQUIRED)` +
                     # `find_package(Eigen3 REQUIRED)`.
                  turtlesim
+
+                 # HW4 (rbe4540-gazebo-sim submodule + its ros2_robotiq_gripper
+                 # nested submodule): Gazebo scene, MoveIt, UR arm/driver, and
+                 # ros2_control stack. None of these are pulled in by `desktop`
+                 # - every one below is `find_package()`d or `exec_depend`ed by
+                 # some package.xml/CMakeLists.txt under HW4/ros2_ws/src.
+                 controller-interface     # robotiq_controllers (custom
+                   # ros2_control plugin for the gripper's activation
+                   # controller)
+                 controller-manager       # spawns/manages controllers at
+                   # runtime (ur_sim_control.launch.py)
+                 ros2-control             # <ros2_control> URDF/xacro tag
+                   # support (ur_gz.ros2_control.xacro)
+                 ros2-controllers         # joint_trajectory_controller,
+                   # forward_command_controller, etc. (config/ur_controllers_w_gripper.yaml)
+                 joint-state-broadcaster
+                 joint-state-publisher-gui
+                 parallel-gripper-controller
+                 gz-ros2-control          # GazeboSimROS2ControlPlugin /
+                   # GazeboSimSystem - the URDF plugin bridging Gazebo to
+                   # ros2_control
+                 ros-gz-sim               # Gazebo Sim itself, launched via
+                   # ros_gz_sim's launch helpers
+                 ros-gz-bridge            # ROS<->Gazebo topic bridge,
+                   # including the palm camera image/camera_info bridge
+                 control-msgs
+                 moveit-msgs
+                 moveit-configs-utils
+                 moveit-ros-move-group
+                 moveit-servo
+                 ur-description
+                 ur-controllers
+                 ur-moveit-config
+                 ur-robot-driver
+                 cv-bridge                # ROS Image <-> OpenCV conversion,
+                   # used directly in ur_move_merlab/simple_run.py's palm
+                   # camera callback
                 ];
               })
             ];
@@ -103,11 +140,27 @@
               # access via a system-level group (see below), not a package.
               alias lsdev="ls -l /dev/ttyUSB* /dev/ttyACM* 2>/dev/null"
 
+              # gz-transport (Gazebo Sim's pub/sub/service layer, separate
+              # from ROS 2's own DDS discovery) picks a network interface for
+              # its UDP multicast discovery by looking at the default route -
+              # on a laptop whose only non-loopback interface is Wi-Fi, that's
+              # the Wi-Fi NIC. Campus/enterprise Wi-Fi (eduroam-style AP
+              # client isolation, IGMP snooping) commonly drops multicast
+              # between processes on the *same* host, so `gz sim server`,
+              # `gz sim gui`, and the `ros_gz_sim create`/spawner nodes never
+              # discover each other's services - gui sits on a black/frozen
+              # window forever waiting for a `/world/<name>/create` service
+              # that's actually right there on localhost. Pinning discovery
+              # to loopback sidesteps the Wi-Fi path entirely; a single
+              # machine's local Gazebo dev workflow never needs multicast to
+              # leave the box anyway.
+              export GZ_IP=127.0.0.1
+
               # Snapshot of the env vars a workspace overlay touches, taken
               # before any workspace is sourced - so switching between
               # workspaces later can restore this baseline first instead of
               # stacking one workspace's overlay on top of another's.
-              for _v in AMENT_PREFIX_PATH CMAKE_PREFIX_PATH PATH PYTHONPATH LD_LIBRARY_PATH PKG_CONFIG_PATH; do
+              for _v in AMENT_PREFIX_PATH CMAKE_PREFIX_PATH PATH PYTHONPATH LD_LIBRARY_PATH PKG_CONFIG_PATH GZ_SIM_RESOURCE_PATH; do
                 export "_ros_pristine_$_v=''${!_v}"
               done
               unset _v
@@ -232,7 +285,7 @@
                 _ros_ws_last_pwd="$PWD"
 
                 local _v _pv
-                for _v in AMENT_PREFIX_PATH CMAKE_PREFIX_PATH PATH PYTHONPATH LD_LIBRARY_PATH PKG_CONFIG_PATH; do
+                for _v in AMENT_PREFIX_PATH CMAKE_PREFIX_PATH PATH PYTHONPATH LD_LIBRARY_PATH PKG_CONFIG_PATH GZ_SIM_RESOURCE_PATH; do
                   _pv="_ros_pristine_$_v"
                   export "$_v=''${!_pv}"
                 done
@@ -261,6 +314,28 @@
                       center "'colcon build --symlink-install', then source it"
                       center "manually with 'source install/setup.bash'"
                     fi
+
+                    # Gazebo Sim resolves `model://<pkg_name>/...` mesh URIs
+                    # (e.g. ros2_robotiq_gripper's `model://robotiq_description/
+                    # meshes/...`) by scanning GZ_SIM_RESOURCE_PATH for a
+                    # directory literally named <pkg_name> - ament's own
+                    # AMENT_PREFIX_PATH/install/setup.bash overlay above
+                    # doesn't feed that search path, so without this a
+                    # colcon-built package's own meshes fail to load in the
+                    # GUI (physics/collision are unaffected - visual only).
+                    # Built from $PWD, not a hardcoded absolute path, so it
+                    # follows wherever this workspace happens to be cloned/
+                    # rebuilt, and works for any locally-built package with
+                    # meshes, not just robotiq_description.
+                    local _share_dir
+                    for _share_dir in install/*/share; do
+                      [ -d "$_share_dir" ] || continue
+                      case ":''${GZ_SIM_RESOURCE_PATH:-}:" in
+                        *":$PWD/$_share_dir:"*) ;;
+                        *) export GZ_SIM_RESOURCE_PATH="''${GZ_SIM_RESOURCE_PATH:+$GZ_SIM_RESOURCE_PATH:}$PWD/$_share_dir" ;;
+                      esac
+                    done
+                    unset _share_dir
                     ;;
                 esac
               }

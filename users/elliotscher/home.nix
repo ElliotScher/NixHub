@@ -144,6 +144,7 @@ in
       extensions = defaultVscodeExtensions ++ [
         inputs.frc-nix.packages.${pkgs.stdenv.hostPlatform.system}.vscode-wpilib
         pkgs.vscode-extensions.vscjava.vscode-java-pack
+        pkgs.vscode-extensions.vscjava.vscode-java-debug
         pkgs.vscode-extensions.redhat.java
         pkgs.vscode-extensions.vscjava.vscode-gradle
       ];
@@ -180,6 +181,76 @@ in
       };
     };
   };
+
+  # vscode-java-debug's "No-Config Debug" feature always tries to mkdir a
+  # scratch dir at ~/.vscode/extensions/vscjava.vscode-java-debug, regardless
+  # of which profile actually loaded the extension - a known unresolved
+  # nixpkgs/VS Code packaging issue (NixOS/nixpkgs#394692; the same pattern
+  # hits ms-python.debugpy and github.copilot-chat). Because frc-roborio and
+  # frc-systemcore are named profiles, home-manager's vscode module
+  # collapses ~/.vscode/extensions into a single read-only symlink into the
+  # nix store (its writable, per-extension-symlink layout only applies when
+  # no named profiles exist - mkVscodeModule.nix branches on
+  # `allProfilesExceptDefault == {}`), so that mkdir always fails with
+  # ENOENT and aborts the whole extension's activation - which is exactly
+  # why VS Code reports "Couldn't find a debug adapter descriptor for debug
+  # type 'java'" (and, downstream, WPILib's "no registered deployers" for
+  # Simulate specifically - see vscode_wpilib_profiles memory). Force the
+  # module to let us clobber its symlink each switch, then immediately
+  # unfold it into individual per-extension symlinks (mirroring what
+  # mutableExtensionsDir=true does when it can apply). For most extensions
+  # that's a single symlink per id, same as before.
+  #
+  # For extensions known to write into their own install path, a symlink
+  # (even one-level-deep, per-child) isn't enough: Node resolves symlinks
+  # when computing a loaded module's own path, so `dist/extension.js`'s
+  # real path is still the nix store, while VS Code's `extensionPath` for a
+  # named-profile-loaded extension resolves to this legacy directory - the
+  # mismatch shows up as "Could not identify extension for 'vscode' require
+  # call" and can leave things like registerDebugAdapterDescriptorFactory
+  # misattributed even though activation reports success. So for these ids
+  # specifically, make a real, fully dereferenced copy instead of symlinks
+  # - small (a few MB) and cheap to redo every switch - so every file's
+  # real path already lives under ~/.vscode/extensions/<id>, matching what
+  # extensionPath expects, while the directory stays genuinely writable for
+  # the runtime mkdir.
+  #
+  # Also skip symlinking extensions.json itself: it's a generated manifest
+  # from the combined store derivation, and a read-only symlink there means
+  # any real `code --install-extension` (e.g. this machine's Claude Code
+  # VS Code companion extension, self-installed on first terminal use)
+  # fails with EROFS trying to record itself. Leaving it absent lets VS
+  # Code (re)generate its own writable one by scanning the directory.
+  #
+  # None of this is used to load extensions for any named profile - those
+  # reference their own nix store paths directly via
+  # ~/.config/Code/User/profiles/<name>/extensions.json - so nothing here
+  # changes what's actually enabled in frc-roborio or frc-systemcore.
+  home.file.".vscode/extensions".force = true;
+  home.activation.unfoldVscodeExtensionsDir = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    extDir="$HOME/.vscode/extensions"
+    if [ -L "$extDir" ]; then
+      target=$(readlink -f "$extDir")
+      run rm -f "$extDir"
+      run mkdir -p "$extDir"
+      if [ -d "$target" ]; then
+        for entry in "$target"/*; do
+          name=$(basename "$entry")
+          case "$name" in
+            extensions.json|.init-default-profile-extensions)
+              ;;
+            vscjava.vscode-java-debug|ms-python.debugpy|github.copilot-chat)
+              run cp -rL --no-preserve=mode "$entry" "$extDir/$name"
+              run chmod -R u+w "$extDir/$name"
+              ;;
+            *)
+              run ln -sfn "$entry" "$extDir/$name"
+              ;;
+          esac
+        done
+      fi
+    fi
+  '';
 
   xdg.desktopEntries.code-frc-roborio = lib.mkDefault {
     name = "VS Code (FRC RoboRIO)";
@@ -418,6 +489,46 @@ in
         chmod u+w "$settings"
       fi
     done
+  '';
+
+  # WPILib's prebuilt halsim_gui.so (the sim GUI) calls
+  # dlopen("libGL.so.1")/dlopen("libGLX.so.0") itself at runtime (GLFW's GLX
+  # backend), rather than declaring them as normal ELF NEEDED entries. That
+  # dlopen only searches the process's LD_LIBRARY_PATH, which WPILib's
+  # simulate launcher hardcodes to just build/jni/{release,debug} - it never
+  # sees this machine's nix-ld library set (NIX_LD_LIBRARY_PATH is not
+  # consulted by a plain dlopen() call; that's only for nix-ld's own loader
+  # substitution on foreign executables). Symlinking mesa/libglvnd's OpenGL
+  # libs directly into that directory is the only place guaranteed to be on
+  # LD_LIBRARY_PATH for the java process WPILib actually launches, and it
+  # needs to be redone every time extractReleaseNative/extractDebugNative
+  # actually re-runs (e.g. after `gradlew clean`), since that task syncs its
+  # output directory and deletes anything not part of the extracted archive.
+  #
+  # Declared as a Gradle init script (applies to every WPILib project on this
+  # machine) so nothing about it is project-specific or imperative - a
+  # `home-manager switch` (or nixos-rebuild) is what puts it in place, not an
+  # ad hoc file write.
+  home.file.".gradle/init.d/nixld-halsim-gui-fix.gradle".text = ''
+    // Personal, machine-local fix (not part of any project repo): see NixHub
+    // users/elliotscher/home.nix for the full explanation.
+    def nixLdLibDir = new File("/run/current-system/sw/share/nix-ld/lib")
+
+    allprojects {
+        tasks.matching { it.name == "extractReleaseNative" || it.name == "extractDebugNative" }.configureEach { t ->
+            doLast {
+                if (!nixLdLibDir.isDirectory()) return
+                def outDir = t.name == "extractReleaseNative" ? new File(buildDir, "jni/release") : new File(buildDir, "jni/debug")
+                if (!outDir.isDirectory()) return
+                nixLdLibDir.listFiles().findAll { it.name ==~ /lib(GL|GLX|GLdispatch|EGL)[._].*/ }.each { src ->
+                    new File(outDir, src.name).toPath().with { link ->
+                        java.nio.file.Files.deleteIfExists(link)
+                        java.nio.file.Files.createSymbolicLink(link, src.toPath())
+                    }
+                }
+            }
+        }
+    }
   '';
 
 }
