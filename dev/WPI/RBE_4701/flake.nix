@@ -59,8 +59,33 @@
             #     pointing at the real cause) and matplotlib's backend
             #     auto-detection concludes "headless", overriding TkAgg back
             #     to plain Agg even with MPLBACKEND=TkAgg set below.
+            #   - glib (libglib-2.0, libgthread-2.0): pulled in indirectly
+            #     by pygame's bundled extension modules.
+            #   - the X11 extension libs (libXext, libXcursor, libXi,
+            #     libXrandr, libXfixes, libXrender) and the Wayland/xkb
+            #     libs (wayland, libxkbcommon, libdecor): SDL2 (bundled in
+            #     pygame) dlopen()s these itself when it initializes its
+            #     x11/wayland video driver backend - they never show up as
+            #     NEEDED entries in `ldd`, so a missing one doesn't error,
+            #     it just makes that whole backend report "not available"
+            #     and pygame silently falls back to the headless "dummy"/
+            #     "offscreen" driver (no window, no exception).
             export LD_LIBRARY_PATH="${
-              pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib pkgs.zlib pkgs.libx11 ]
+              pkgs.lib.makeLibraryPath [
+                pkgs.stdenv.cc.cc.lib
+                pkgs.zlib
+                pkgs.libx11
+                pkgs.glib
+                pkgs.libxext
+                pkgs.libxcursor
+                pkgs.libxi
+                pkgs.libxrandr
+                pkgs.libxfixes
+                pkgs.libxrender
+                pkgs.wayland
+                pkgs.libxkbcommon
+                pkgs.libdecor
+              ]
             }''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
             # matplotlib's own backend auto-detection doesn't pick TkAgg

@@ -12,6 +12,20 @@ let
   wpilibIconRoborio = mkWpilibIcon inputs.frc-nix;
   wpilibIconSystemcore = mkWpilibIcon inputs.frc-nix-alpha;
 
+  # Google Messages (messages.google.com/web) is the only client that
+  # actually surfaces RCS alongside SMS/MMS, since RCS is proprietary to
+  # Google's Jibe backend and isn't exposed through KDE Connect/GSConnect's
+  # SMS plugin (which only reads the phone's local SMS/MMS content
+  # provider). There's no native Linux client for it, so this wraps Chrome
+  # in --app mode against the site instead - same mechanism as manually
+  # clicking "Install page as app" in Chrome's UI, just declared here so it
+  # survives a rebuild. A dedicated --user-data-dir keeps its paired
+  # session/cookies isolated from the main Chrome profile.
+  googleMessagesIcon = pkgs.fetchurl {
+    url = "https://ssl.gstatic.com/android-messages-web/images/2022.3/1x/messages_2022_round_512dp.png";
+    sha256 = "sha256-sB4HWGCksWFkTUzWHcFfioqepcRfILCbZcC/TOmHRU0=";
+  };
+
   # The only JDK that's ever a permanent part of this closure - it's
   # referenced directly (not via the flake below) purely to host
   # redhat.java's language server, which needs Java 21+ just to run,
@@ -303,6 +317,7 @@ in
         "org.gnome.Nautilus.desktop"
         "slack.desktop"
         "discord.desktop"
+        "google-messages.desktop"
         "spotify.desktop"
         "code.desktop"
         "code-frc-roborio.desktop"
@@ -406,24 +421,44 @@ in
       click-method = "fingers";
     };
 
-    "org/gnome/shell/extensions/dash-to-dock" = lib.mkDefault {
-      dock-fixed = false;
-      autohide = true;
+    # Replaced dash-to-dock with dash-to-panel (see account.nix's package
+    # comment). dash-to-dock's isolate-workspaces only filters which
+    # non-favorited running apps appear in the dock - favorited icons are
+    # unconditionally always shown (dash.js: `newApps.push(...favorites)`
+    # runs before any isolation filtering), and even their running-dot
+    # indicator only gets recomputed when a window actually moves between
+    # workspaces or the app's own state changes, never on a plain
+    # workspace switch (confirmed against the shipped source, and matches
+    # a known open upstream regression:
+    # https://github.com/micheleg/dash-to-dock/issues/1685). dash-to-panel
+    # doesn't have that gap: every TaskbarAppIcon (favorited or not)
+    # registers its own unconditional `switch-workspace` listener
+    # (appIcons.js: `_onSwitchWorkspace` -> `_displayProperIndicator`), so
+    # the indicator is correctly recomputed for the current workspace on
+    # every switch.
+    #
+    # One real behavior change: dash-to-panel has no direct equivalent of
+    # dash-to-dock's autohide (always hidden, reveal on pointer-at-edge).
+    # Its closest analog is intellihide (hide only while a window would
+    # overlap the panel), so the panel is visible by default rather than
+    # hidden until hovered.
+    "org/gnome/shell/extensions/dash-to-panel" = lib.mkDefault {
       intellihide = true;
-      extend-height = false;
 
-      dock-position = "BOTTOM";
+      isolate-workspaces = true;
 
-      transparency-mode = "FIXED";
-      background-opacity = 0.8;
+      panel-position = "BOTTOM";
 
-      dash-max-icon-size = 48;
+      trans-use-custom-opacity = true;
+      trans-panel-opacity = 0.8;
 
-      show-trash = false;
-      show-mounts = false;
+      panel-size = 48;
 
-      multi-monitor = false;
-      click-action = "minimize";
+      multi-monitors = false;
+
+      # dash-to-panel's clickAction enum nicks are uppercase, unlike
+      # dash-to-dock's lowercase ones.
+      click-action = "MINIMIZE";
     };
   };
 
@@ -442,6 +477,28 @@ in
       alias = {
         prune-branches = "!git remote prune origin && git branch -vv | grep ': gone]' | awk '{print $1}' | xargs -r git branch -d";
       };
+    };
+  };
+
+  xdg.desktopEntries.google-messages = lib.mkDefault {
+    name = "Messages";
+    genericName = "SMS/MMS/RCS Messaging";
+    # --ozone-platform=x11 forces this window onto XWayland instead of
+    # native Wayland. Chrome's `--app=` mode treats every launch as its own
+    # installed web app and, on native Wayland, sets the window's app_id
+    # from that internal web-app identity - not from --class - so GNOME
+    # can never match the live window back to this .desktop file's
+    # StartupWMClass, and falls back to a generic icon for the running
+    # window/taskbar entry (the pinned launcher icon looks fine regardless,
+    # since that's read straight from this file's Icon=, with no matching
+    # involved). Under XWayland, --class sets the classic X11 WM_CLASS,
+    # which GNOME's window matching handles correctly.
+    exec = "${pkgs.google-chrome}/bin/google-chrome-stable --ozone-platform=x11 --app=https://messages.google.com/web/ --class=google-messages --user-data-dir=${config.home.homeDirectory}/.config/google-messages-pwa";
+    icon = "${googleMessagesIcon}";
+    comment = "Send and receive SMS, MMS, and RCS messages linked to your Android phone";
+    categories = [ "Network" "InstantMessaging" ];
+    settings = {
+      StartupWMClass = "google-messages";
     };
   };
 

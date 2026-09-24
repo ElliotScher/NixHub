@@ -82,7 +82,7 @@
   programs.dconf.profiles.user.databases = lib.mkDefault [
     {
       settings."org/gnome/shell".enabled-extensions = [
-        "dash-to-dock@micxgx.gmail.com"
+        "dash-to-panel@jderose9.github.com"
         "appindicatorsupport@rgcjonas.gmail.com"
         "gsconnect@andyholmes.github.io"
         "live-lockscreen@nick-redwill"

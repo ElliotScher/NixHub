@@ -53,7 +53,15 @@
       jetbrains.pycharm
       jetbrains.webstorm
 
-      gnomeExtensions.dash-to-dock
+      # dash-to-dock's isolate-workspaces doesn't actually refresh a
+      # favorited (always-shown) icon's running-indicator on a plain
+      # workspace switch - only on a window actually moving between
+      # workspaces or the app's own state changing (see the note by
+      # org/gnome/shell/extensions/dash-to-panel in home.nix for the full
+      # explanation, including the upstream issue). dash-to-panel's
+      # equivalent TaskbarAppIcon listens to 'switch-workspace' directly
+      # per-icon and unconditionally, so it doesn't have that gap.
+      gnomeExtensions.dash-to-panel
       gnomeExtensions.appindicator
       gnomeExtensions.gsconnect
       gnomeExtensions.live-lock-screen
