@@ -79,7 +79,20 @@
   # later writes. Keep this list in sync with the
   # dconf.settings."org/gnome/shell".enabled-extensions list in
   # ../users/elliotscher/home.nix.
-  programs.dconf.profiles.user.databases = lib.mkDefault [
+  #
+  # Deliberately NOT wrapped in mkDefault, unlike almost everything else in
+  # this file: nixpkgs' programs/virt-manager.nix module (enabled on atta via
+  # programs.virt-manager.enable) sets this exact same option - a plain list,
+  # at normal priority - to lock its own org/virt-manager/virt-manager/
+  # connections database. NixOS only concatenates multiple definitions of a
+  # listOf option when they share the same priority; a lower-priority
+  # (mkDefault) list here would lose outright to virt-manager's and be
+  # dropped entirely, not merged - which is exactly what was happening
+  # (confirmed via `nix eval ...#nixosConfigurations.atta.config.programs.
+  # dconf.profiles.user.databases`: only virt-manager's entry ever showed up,
+  # silently discarding every change made here). Matching its normal
+  # priority lets both databases coexist in the final concatenated list.
+  programs.dconf.profiles.user.databases = [
     {
       settings."org/gnome/shell".enabled-extensions = [
         "dash-to-panel@jderose9.github.com"
