@@ -26,6 +26,15 @@ let
     sha256 = "sha256-sB4HWGCksWFkTUzWHcFfioqepcRfILCbZcC/TOmHRU0=";
   };
 
+  # karere (see account.nix) ships its own koru-spiral app icon rather than
+  # the real WhatsApp logo, deliberately avoiding Meta's trademark. The
+  # xdg.desktopEntries override below swaps in the actual logo for taskbar/
+  # app-grid consistency with the other messaging apps.
+  whatsappIcon = pkgs.fetchurl {
+    url = "https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg";
+    sha256 = "sha256-3WpNssOUyhGqirCHNp8vUKEub4dOSdt7HVYJ0Kj7KMo=";
+  };
+
   # The only JDK that's ever a permanent part of this closure - it's
   # referenced directly (not via the flake below) purely to host
   # redhat.java's language server, which needs Java 21+ just to run,
@@ -188,9 +197,24 @@ in
         pkgs.vscode-extensions.vscjava.vscode-gradle
       ];
       userSettings = defaultVscodeUserSettings // {
-        # Same rationale as frc-roborio above, just for the SystemCore
-        # (JDK 25) devshell instead of roboRIO's (JDK 17).
-        "java.jdt.ls.java.home" = "${frcJdk21.home}";
+        # Unlike frc-roborio, this points at the same per-profile symlink as
+        # java.import.gradle.java.home below, rather than the static JDK 21 -
+        # WPILib's own Build/Deploy/Simulate commands have their own internal
+        # JDK-detection chain (findJdkPath in vscode-wpilib's extension.js)
+        # that checks java.jdt.ls.java.home FIRST, accepting any JDK >=17 it
+        # finds there and completely ignoring java.import.gradle.java.home -
+        # so leaving this statically pinned to JDK 21 made WPILib always
+        # build/deploy/simulate on 21, which SystemCore's build.gradle Java
+        # toolchain (languageVersion=25) rejects outright ("Cannot find a
+        # Java installation ... matching languageVersion=25"). JDK 25 is
+        # still >=21, so pointing this at the symlink satisfies both roles:
+        # redhat.java can still host its language server on it, and it's now
+        # also the first (decisive) value WPILib's own detection reads.
+        # roboRIO can't use this same trick: redhat.java enforces a hard >=21
+        # minimum on this exact setting, and JDK 17 < 21 - but that's fine
+        # there, since roboRIO's build has no explicit toolchain requirement
+        # and compiles successfully under a JDK 21 host JVM anyway.
+        "java.jdt.ls.java.home" = frcGradleJavaHomeLink "systemcore";
         "java.import.gradle.java.home" = frcGradleJavaHomeLink "systemcore";
       };
     };
@@ -241,6 +265,21 @@ in
   # ~/.config/Code/User/profiles/<name>/extensions.json - so nothing here
   # changes what's actually enabled in frc-roborio or frc-systemcore.
   home.file.".vscode/extensions".force = true;
+  # This repo's global home-manager.backupFileExtension ("backup", set in
+  # flake.nix) makes the core link step back up any existing non-symlink
+  # target before it can (re)place the store symlink here - and since
+  # unfoldVscodeExtensionsDir below always leaves a real directory in place
+  # of that symlink, every switch produces a fresh $extDir.backup that the
+  # *next* switch's backup step then collides with (mv refuses to merge it
+  # into the still-present one from last time), permanently wedging
+  # activation. Nothing under $extDir is unique - it's either a store
+  # symlink or a dereferenced copy sourced from the store (see comment
+  # above) - so there's nothing worth keeping in that backup; clear it right
+  # before the core link step runs so this switch's backup always lands
+  # clean.
+  home.activation.cleanupVscodeExtensionsBackup = lib.hm.dag.entryBefore [ "writeBoundary" ] ''
+    run rm -rf "$HOME/.vscode/extensions.backup"
+  '';
   home.activation.unfoldVscodeExtensionsDir = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     extDir="$HOME/.vscode/extensions"
     if [ -L "$extDir" ]; then
@@ -315,9 +354,10 @@ in
         "google-chrome.desktop"
         "org.gnome.Console.desktop"
         "org.gnome.Nautilus.desktop"
-        "slack.desktop"
-        "discord.desktop"
         "google-messages.desktop"
+        "slack.desktop"
+        "io.github.tobagin.karere.desktop"
+        "discord.desktop"
         "spotify.desktop"
         "code.desktop"
         "code-frc-roborio.desktop"
@@ -406,6 +446,15 @@ in
       button-layout = "appmenu:minimize,maximize,close";
       focus-mode = "click";
       num-workspaces = 4;
+    };
+
+    # Default is `true`, which scopes a workspace to the primary monitor
+    # only - windows on a secondary monitor stay fixed regardless of the
+    # active workspace, so switching workspaces or changing the monitor
+    # layout (plug/unplug) reshuffles window-to-workspace assignments.
+    # `false` makes a workspace span every connected display as one unit.
+    "org/gnome/mutter" = lib.mkDefault {
+      workspaces-only-on-primary = false;
     };
 
     "org/gnome/desktop/peripherals/keyboard" = lib.mkDefault {
@@ -502,6 +551,24 @@ in
     };
   };
 
+  # Overrides karere's own bundled desktop entry (same desktop-file ID) purely
+  # to swap Icon= to the real WhatsApp logo - a user-level entry with a
+  # matching ID takes precedence over the system one it shadows. Exec,
+  # StartupWMClass and MimeType mirror karere's upstream .desktop file so
+  # window matching and the whatsapp:// URL handler keep working.
+  xdg.desktopEntries."io.github.tobagin.karere" = lib.mkDefault {
+    name = "Karere";
+    genericName = "WhatsApp Client";
+    exec = "karere %U";
+    icon = "${whatsappIcon}";
+    comment = "Native WhatsApp Web client for Linux desktop";
+    categories = [ "Network" "InstantMessaging" "Chat" ];
+    mimeType = [ "x-scheme-handler/whatsapp" ];
+    settings = {
+      StartupWMClass = "karere";
+    };
+  };
+
   xdg.desktopEntries.zotero = lib.mkDefault {
     name = "Zotero";
     exec = "zotero -url %U";
@@ -549,6 +616,22 @@ in
         chmod u+w "$settings"
       fi
     done
+  '';
+
+  # Gradle's Java Toolchain auto-detection (used by any project, like
+  # SystemCore's, that declares an explicit `languageVersion` toolchain
+  # requirement) only scans conventional system JDK locations by default -
+  # it never considers arbitrary Nix store paths, so without this it fails
+  # outright with "Cannot find a Java installation ... Toolchain download
+  # repositories have not been configured" even once $JAVA_HOME is correctly
+  # set (see java.jdt.ls.java.home's comment in the frc-systemcore profile
+  # above). Pointing auto-detection at $JAVA_HOME lets it find whichever JDK
+  # the active FRC devshell already put there, instead of trying to download
+  # one. Declared globally (GRADLE_USER_HOME's gradle.properties applies to
+  # every Gradle project on this machine) rather than per-project, matching
+  # the nixld-halsim-gui-fix init script below.
+  home.file.".gradle/gradle.properties".text = ''
+    org.gradle.java.installations.fromEnv=JAVA_HOME
   '';
 
   # WPILib's prebuilt halsim_gui.so (the sim GUI) calls

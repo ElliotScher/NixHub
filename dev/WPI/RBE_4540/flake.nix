@@ -71,6 +71,20 @@
                 # library, not a ROS package, so it isn't in rosPackages.jazzy
                 # at all. Needed by any node that does `#include <Eigen/...>`
                 # (e.g. custom_cpp_srvcli's grasp-matrix server).
+              pkgs.pcl # the actual PCL (Point Cloud Library) headers/libs -
+                # the C++ equivalent of the class-provided libpcl-dev, for any
+                # node that does `#include <pcl/...>` directly (rather than
+                # going through a ROS message conversion layer).
+              pkgs.librealsense # plain nixpkgs build (not ROS-overlaid) -
+                # gives `realsense-viewer` (GUI) and `rs-enumerate-devices`/
+                # `rs-fw-update` (CLI) for checking the D405 is detected and
+                # streaming before debugging it through ROS. The driver node
+                # itself (below) pulls in its own librealsense2 build via
+                # rosPackages.jazzy, so this is purely for standalone
+                # diagnostics. Needs the camera's udev rules installed
+                # system-wide (services.udev.packages in the host's NixOS
+                # config) for non-root USB access - see the shellHook check
+                # below.
               (with pkgs.rosPackages.jazzy; buildEnv {
                 paths = [
                   desktop # ros-base + rviz2 + rqt + demos/tutorials
@@ -92,6 +106,13 @@
                     # whose CMakeLists.txt does
                     # `find_package(eigen3_cmake_module REQUIRED)` +
                     # `find_package(Eigen3 REQUIRED)`.
+                  sensor-msgs # C++ (rclcpp) message definitions for sensor
+                    # data (PointCloud2, Image, LaserScan, ...) - the C++
+                    # counterpart of the class-provided
+                    # ros-jazzy-sensor-msgs-py.
+                  tf2-ros # C++ (rclcpp) tf2 buffer/listener/broadcaster -
+                    # the C++ counterpart of the class-provided
+                    # ros-jazzy-tf2-ros-py.
                  turtlesim
 
                  # HW4 (rbe4540-gazebo-sim submodule + its ros2_robotiq_gripper
@@ -130,6 +151,16 @@
                  cv-bridge                # ROS Image <-> OpenCV conversion,
                    # used directly in ur_move_merlab/simple_run.py's palm
                    # camera callback
+
+                 # Final project: Intel RealSense D405 (wrist/eye-in-hand
+                 # depth camera) driver stack.
+                 realsense2-camera        # realsense2_camera_node - publishes
+                   # /camera/.../color, depth, and aligned point cloud
+                   # topics; bundles its own librealsense2 build.
+                 realsense2-camera-msgs   # Metadata/extrinsics messages
+                   # published alongside the image/point cloud topics above.
+                 realsense2-description   # URDF/xacro for the D405, for
+                   # mounting it on the UR arm's end effector in rviz2/tf2.
                 ];
               })
             ];
@@ -219,6 +250,25 @@
                 center "/dev/ttyUSB*, /dev/ttyACM* (robot hardware) yet."
                 center "Add it via users.users.<you>.extraGroups in your"
                 center "host's NixOS configuration.nix, then rebuild+switch."
+              fi
+
+              # The RealSense D405's udev rules (MODE 0666 + TAG+="uaccess",
+              # so any logged-in user gets access via systemd-logind - no
+              # group needed) have to be installed system-wide via
+              # services.udev.packages in the host's NixOS config, same
+              # reason as the dialout check above - this project flake can't
+              # install them itself. Heuristic check: grep the live,
+              # merged udev rules directory for the vendor string instead of
+              # looking for a specific file name, since NixOS doesn't
+              # preserve each package's rule file name there.
+              if grep -rlq "RealSense" /etc/udev/rules.d 2>/dev/null; then
+                center "RealSense D405 udev rules: OK"
+              else
+                center "WARNING: RealSense udev rules not found in"
+                center "/etc/udev/rules.d - the D405 will only open as root."
+                center "Add services.udev.packages = [ pkgs.librealsense ];"
+                center "to your host's NixOS configuration.nix, then"
+                center "rebuild+switch."
               fi
 
               # `ros2` is a Nix-generated wrapper that unconditionally
@@ -350,6 +400,7 @@
               center "colcon build --symlink-install"
               center "rviz2"
               center "lsdev   (list connected serial/USB robot hardware)"
+              center "realsense-viewer   (check the D405 is detected/streaming)"
               center "colcon_cd <pkg>   (cd into a package, tab-completes)"
               center "colcon build --mixin release   (or debug, ccache, ...)"
               center "cd into any *_ws dir - its overlay auto-sources"

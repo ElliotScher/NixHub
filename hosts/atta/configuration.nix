@@ -34,4 +34,10 @@
   # LIDAR, etc). On Ubuntu this is normally `sudo usermod -aG dialout $USER`;
   # on NixOS it has to go through extraGroups + a rebuild instead.
   users.users.elliotscher.extraGroups = [ "libvirtd" "dialout" ];
+
+  # Intel RealSense D405 (RBE 4540 final project camera) udev rules - grants
+  # non-root USB access (MODE 0666 + TAG+="uaccess", picked up per-session by
+  # systemd-logind, so no extraGroups entry is needed here, unlike dialout
+  # above). Without this the camera only opens as root.
+  services.udev.packages = [ pkgs.librealsense ];
 }

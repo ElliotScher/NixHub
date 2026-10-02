@@ -29,6 +29,7 @@
       google-chrome
 
       slack
+      karere
       discord
 
       zotero
