@@ -406,17 +406,28 @@ in
       picture-options = "zoom";
     };
 
+    # picture-uri/picture-options/primary-color/secondary-color are
+    # deliberately not set here: GNOME Shell's current UnlockDialog no longer
+    # renders a background from this schema at all (confirmed empirically -
+    # it stays black regardless of this key, even across a full
+    # logout/login), and the Settings app no longer exposes a picture
+    # chooser for Screen Lock either. The actual lock-screen background is
+    # now supplied by the unlockDialogBackground extension below, via its
+    # own schema.
     "org/gnome/desktop/screensaver" = lib.mkDefault {
-      picture-uri =
-        "file:///home/elliotscher/Pictures/Backgrounds/theonering.webp";
-
-      picture-options = "zoom";
-
-      primary-color = "#3465a4";
-      secondary-color = "#000000";
-
       lock-enabled = true;
       lock-delay = lib.hm.gvariant.mkUint32 0;
+    };
+
+    "org/gnome/shell/extensions/unlock-dialog-background" = lib.mkDefault {
+      switch = true;
+
+      picture-uri =
+        "file:///home/elliotscher/Pictures/Backgrounds/pascal-debrunner-d7Bvh_2cFnA-unsplash.jpg";
+      picture-uri-dark =
+        "file:///home/elliotscher/Pictures/Backgrounds/pascal-debrunner-d7Bvh_2cFnA-unsplash.jpg";
+
+      picture-options = "zoom";
     };
 
     "org/gnome/desktop/session" = lib.mkDefault {

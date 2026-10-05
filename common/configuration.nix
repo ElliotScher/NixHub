@@ -98,22 +98,11 @@
         "dash-to-panel@jderose9.github.com"
         "appindicatorsupport@rgcjonas.gmail.com"
         "gsconnect@andyholmes.github.io"
-        "live-lockscreen@nick-redwill"
+        "unlockDialogBackground@sun.wxg@gmail.com"
       ];
       locks = [ "/org/gnome/shell/enabled-extensions" ];
     }
   ];
-
-  # gnomeExtensions.live-lock-screen renders video through the GStreamer
-  # element gtk4paintablesink, which lives in gst-plugins-rs - a package
-  # GNOME Shell's own build doesn't bundle (it only wraps itself with
-  # gst-plugins-base/good). PAM sources /etc/set-environment into every
-  # session on NixOS, including GDM's, so exposing the plugin path here makes
-  # it visible system-wide; gnome-shell's wrapper then prefixes its own
-  # GST_PLUGIN_SYSTEM_PATH_1_0 onto whatever's already in the environment, so
-  # both plugin sets end up on the combined search path.
-  environment.variables.GST_PLUGIN_SYSTEM_PATH_1_0 =
-    lib.mkDefault "${pkgs.gst_all_1.gst-plugins-rs}/lib/gstreamer-1.0";
 
   # ---------------------------
   # Keyboard layout
@@ -142,6 +131,37 @@
   services.printing.enable = lib.mkDefault true;
 
   # ---------------------------
+  # mDNS (WPILib NetworkTables announces itself via Avahi)
+  # ---------------------------
+  services.avahi = {
+    enable = lib.mkDefault true;
+    publish = {
+      enable = lib.mkDefault true;
+      userServices = lib.mkDefault true;
+    };
+  };
+
+  # ---------------------------
+  # Xbox controllers (FRC sim driver input)
+  # ---------------------------
+  # xone is the out-of-tree GIP (Xbox One/Series protocol) driver. The
+  # in-kernel xpad driver doesn't complete the GIP handshake with
+  # Xbox-licensed third-party pads like the GameSir G7 SE (3537:10a0): the
+  # controller fails to configure ("can't set config #1, error -71"), then
+  # re-enumerates in a fallback generic-HID mode (3537:1082) with its LED
+  # off and a non-standard button/axis layout. xone also handles the
+  # wireless dongle and the controller's headset jack.
+  hardware.xone.enable = lib.mkDefault true;
+
+  # The G7 SE's Xbox-mode firmware also chokes on Linux's 9-byte initial
+  # config-descriptor read ("config index 0 descriptor too short (expected
+  # 80, got 73)") before any driver even sees it. Quirk flag "r"
+  # (USB_QUIRK_WINDOWS_CONFIG_REQ_SIZE, upstream in 7.2, backported to
+  # 6.18.x) makes usbcore ask for 255 bytes like Windows does instead.
+  # NOTE: a plain list, not mkDefault, so hosts can append their own params.
+  boot.kernelParams = [ "usbcore.quirks=3537:10a0:r" ];
+
+  # ---------------------------
   # Firmware updates
   # ---------------------------
   services.fwupd.enable = lib.mkDefault true;
@@ -161,40 +181,6 @@
     gnome-tweaks
     gnome-extension-manager
     fprintd
-
-    # gnomeExtensions.live-lock-screen spawns a helper process ("gjs -m
-    # .../external/run.js") to actually decode and render the video - a
-    # separate process from GNOME Shell itself, found by searching $PATH for
-    # a plain "gjs", which NixOS doesn't provide by default. That bare gjs
-    # also has no way to find GTK4's or GStreamer's typelibs, or GStreamer's
-    # plugins, since those are normally baked into an app's wrapper at build
-    # time. Build that wrapper ourselves the same way nixpkgs would for any
-    # other GTK4 app - listing the needed libraries as buildInputs lets their
-    # setup hooks populate GI_TYPELIB_PATH/GST_PLUGIN_SYSTEM_PATH_1_0, which
-    # gets captured into the wrapper - and put the result on $PATH as the
-    # only "gjs" available.
-    (symlinkJoin {
-      name = "gjs-with-gtk4-gst";
-      paths = [ gjs ];
-      buildInputs = [
-        makeWrapper
-        gobject-introspection
-        gtk4
-      ] ++ (with gst_all_1; [
-        gstreamer
-        gst-plugins-base
-        gst-plugins-good
-        gst-plugins-bad
-        gst-plugins-ugly
-        gst-libav
-        gst-plugins-rs
-      ]);
-      postBuild = ''
-        wrapProgram $out/bin/gjs \
-          --set GI_TYPELIB_PATH "$GI_TYPELIB_PATH" \
-          --set GST_PLUGIN_SYSTEM_PATH_1_0 "$GST_PLUGIN_SYSTEM_PATH_1_0"
-      '';
-    })
   ];
 
   # ---------------------------

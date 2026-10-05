@@ -65,7 +65,7 @@
       gnomeExtensions.dash-to-panel
       gnomeExtensions.appindicator
       gnomeExtensions.gsconnect
-      gnomeExtensions.live-lock-screen
+      gnomeExtensions.unlock-dialog-background
 
       # FRC packages (from local frc-nix flake)
       inputs.frc-nix.packages.${pkgs.stdenv.hostPlatform.system}.advantagescope
@@ -77,6 +77,7 @@
       inputs.frc-nix.packages.${pkgs.stdenv.hostPlatform.system}.wpilib-utility
 
       kicad
+      (callPackage ./cad-assistant.nix { })
     ];
   };
 }
