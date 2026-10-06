@@ -1,7 +1,11 @@
 { nixpkgs, system, inputs, home-manager }:
 
 let
-  pkgs = import nixpkgs { inherit system; config.allowUnfree = true; };
+  pkgs = import nixpkgs {
+    inherit system;
+    config.allowUnfree = true;
+    overlays = import ../overlays.nix;
+  };
 in
 pkgs.testers.nixosTest {
   name = "nixhub-common-smoke-test";

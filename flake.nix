@@ -20,7 +20,11 @@
     let
       system = "x86_64-linux";
       lib = nixpkgs.lib;
-      pkgs = import nixpkgs { inherit system; config.allowUnfree = true; };
+      pkgs = import nixpkgs {
+        inherit system;
+        config.allowUnfree = true;
+        overlays = import ./overlays.nix;
+      };
 
       hostNames = builtins.attrNames (
         lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ./hosts)
