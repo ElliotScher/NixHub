@@ -8,9 +8,53 @@
   outputs = { self, nix-ros-overlay, nixpkgs }:
     nix-ros-overlay.inputs.flake-utils.lib.eachDefaultSystem (system:
       let
+        # Kinova Gen3 lite (final project, real arm) fixes for the released
+        # ros2_kortex 0.2.6 packages:
+        #  - kortex-driver: its CMakeLists.txt FetchContent-downloads Kinova's
+        #    prebuilt API zip at configure time, which the Nix build sandbox
+        #    can't do. Fetch it as a fixed-output derivation and point
+        #    FetchContent at it instead.
+        #  - kortex-description: 0.2.6's gen3_lite `load_arm` macro is missing
+        #    the `gripper` param that kortex_robot.xacro passes it, so xacro
+        #    fails to generate the robot description at all (same bug as the
+        #    apt package; fixed upstream on the jazzy branch, but that branch's
+        #    description also adds velocity interfaces the 0.2.6 driver doesn't
+        #    export, so patch the one line instead of switching branches).
+        #    The file has CRLF line endings, hence the sed with `\r\?`.
+        #  - kinova-gen3-lite-moveit-config: drop moveit-setup-assistant (the
+        #    config-generator GUI, never used at runtime and not in the binary
+        #    cache, so it would otherwise build from source).
+        kinovaFix = final: prev: {
+          rosPackages = prev.rosPackages // {
+            jazzy = prev.rosPackages.jazzy.overrideScope (rfinal: rprev: {
+              kortex-driver = rprev.kortex-driver.overrideAttrs (old: {
+                cmakeFlags = (old.cmakeFlags or [ ]) ++ [
+                  "-DFETCHCONTENT_SOURCE_DIR_KINOVA_BINARY_API=${final.fetchzip {
+                    url = "https://artifactory.kinovaapps.com:443/artifactory/generic-public/kortex/API/2.5.0/linux_x86-64_x86_gcc.zip";
+                    sha256 = "0izma2q5k5kfqx4xbvfrzw6bmwk5sdl0pdg3jlni4km8f2shrxgr";
+                    stripRoot = false;
+                  }}"
+                ];
+              });
+              kortex-description = rprev.kortex-description.overrideAttrs (old: {
+                postPatch = (old.postPatch or "") + ''
+                  sed -i 's/^\(\s*\)gripper_joint_name\r\?$/\1gripper:=gen3_lite_2f\n&/' \
+                    arms/gen3_lite/6dof/urdf/gen3_lite_macro.xacro
+                  grep -q "gripper:=gen3_lite_2f" arms/gen3_lite/6dof/urdf/gen3_lite_macro.xacro
+                '';
+              });
+              kinova-gen3-lite-moveit-config = rprev.kinova-gen3-lite-moveit-config.overrideAttrs (old: {
+                propagatedBuildInputs = builtins.filter
+                  (p: (p.pname or "") != "ros-jazzy-moveit-setup-assistant")
+                  (old.propagatedBuildInputs or [ ]);
+              });
+            });
+          };
+        };
+
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ nix-ros-overlay.overlays.default ];
+          overlays = [ nix-ros-overlay.overlays.default kinovaFix ];
         };
 
         # `pkgs.colcon` (ROS-overlaid) already bundles colcon-ros, -cmake,
@@ -161,6 +205,23 @@
                    # published alongside the image/point cloud topics above.
                  realsense2-description   # URDF/xacro for the D405, for
                    # mounting it on the UR arm's end effector in rviz2/tf2.
+
+                 # Final project: Kinova Gen3 lite arm (real robot + Gazebo),
+                 # see kinovaFix above for the patches.
+                 kortex-driver            # ros2_control hardware plugin
+                   # (KortexMultiInterfaceHardware) talking to the arm at
+                   # 192.168.1.10.
+                 kortex-description       # Gen3 lite + 2F gripper URDF/xacro.
+                 kinova-gen3-lite-moveit-config # robot.launch.py: driver +
+                   # controllers + move_group.
+                 picknik-twist-controller # spawned by robot.launch.py.
+                 picknik-reset-fault-controller # spawned by robot.launch.py
+                   # on real hardware.
+                 pcl-conversions          # cvproc (PCL <-> PointCloud2).
+                 tf2-eigen                # cvproc.
+                 pkgs.python3Packages.scipy # kinova_sim's multiview_capture.py
+                   # / grasp_executor.py (Rotation); same python3 as the ROS
+                   # env, so it lands on the same PYTHONPATH as numpy.
                 ];
               })
             ];
