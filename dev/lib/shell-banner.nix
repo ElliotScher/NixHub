@@ -4,8 +4,17 @@
 # matches the longest of title/subtitle regardless of how long that text
 # ends up being (including subtitles with runtime substitutions like
 # `$(node --version)`).
+#
+# When the shell is being loaded by direnv (the `use nixhub` helper in
+# users/elliotscher/home.nix sets NIXHUB_DIRENV) rather than an interactive
+# `nix develop`, the rest of the shellHook's stdout - this banner and every
+# status `center`/`echo` after it - is discarded so `cd` and IDE env loads
+# stay quiet. stderr is untouched, so real errors (a failed `uv sync`, etc.)
+# still show up.
 { title, subtitle ? null, margin ? 4 }:
 ''
+  if [ -n "''${NIXHUB_DIRENV:-}" ]; then exec 1>/dev/null; fi
+
   TITLE_LEN=$(printf '%s' "${title}" | wc -c)
   ${if subtitle != null then ''SUBTITLE_LEN=$(printf '%s' "${subtitle}" | wc -c)'' else "SUBTITLE_LEN=0"}
   BAR_WIDTH=$(( TITLE_LEN > SUBTITLE_LEN ? TITLE_LEN : SUBTITLE_LEN ))

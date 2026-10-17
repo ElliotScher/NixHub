@@ -84,7 +84,21 @@ let
 
   defaultVscodeExtensions = [
     pkgs.vscode-extensions.github.vscode-pull-request-github
+    # Loads a project's .envrc (see devProjects below) into the extension
+    # host, terminals, tasks and debuggers, so language tooling runs inside
+    # that project's devshell without launching `code` from `nix develop`.
+    pkgs.vscode-extensions.mkhl.direnv
   ];
+
+  # better_direnv (JetBrains Marketplace plugin 19275); see home.file below.
+  # 1.4.2 declares since-build 261 with no upper bound.
+  betterDirenvPlugin = pkgs.fetchzip {
+    url = "https://plugins.jetbrains.com/files/19275/1139989/better_direnv-1.4.2.zip";
+    hash = "sha256-Use9CLSKRhn5LqcBrMOUgrsTsa0qH86QI4GBGssM0kI=";
+  };
+
+  devProjects = import ./dev-projects.nix;
+  devProjectsManifest = builtins.toJSON devProjects;
 
   defaultVscodeUserSettings = {
     "window.autoDetectColorScheme" = true;
@@ -120,7 +134,82 @@ in
   programs.direnv = lib.mkDefault {
     enable = true;
     nix-direnv.enable = true;
+    # (hide_env_diff is set in `imports` below, not here - see there.)
+    # `use nixhub <dir under dev/>[#shell]` - what the generated project
+    # .envrc files call. NixHub's location is read at load time from the
+    # state file `rebuild` records (never baked in here), so moving the
+    # checkout only takes one `nix run <new path>#rebuild`.
+    # NIXHUB_DIRENV is deliberately not exported: it's only visible to the
+    # devshell's shellHook running in this same shell, which uses it to stay
+    # quiet (see dev/lib/shell-banner.nix).
+    stdlib = ''
+      use_nixhub() {
+        local root ref=$1 dir=''${1%%#*}
+        root=$(cat "$HOME/.local/state/nixhub/root" 2>/dev/null) || {
+          log_error "NixHub's location is unknown - run: nix run <path to NixHub>#rebuild"
+          return 1
+        }
+        if [[ ! -f $root/dev/$dir/flake.nix ]]; then
+          log_error "NixHub devshell '$dir' not found under $root/dev (renamed? update users/elliotscher/dev-projects.nix)"
+          return 1
+        fi
+        watch_file "$HOME/.local/state/nixhub/root"
+        NIXHUB_DIRENV=1
+        use flake "$root/dev/$ref"
+        unset NIXHUB_DIRENV
+      }
+    '';
   };
+
+  # JetBrains counterpart of mkhl.direnv: better_direnv applies a project's
+  # .envrc to its run configurations (tick "Enable direnv" per run config, or
+  # once in the run configuration templates). Linked into each IDE's user
+  # plugin directory rather than baked in with jetbrains.plugins.addPlugins,
+  # which would copy and re-patch every multi-GB IDE locally on each nixpkgs
+  # bump. The directory name is derived from the installed IDE's version, so
+  # this follows 2026.2 -> 2026.3 on its own. Pinned and read-only, so the
+  # IDE's own "update plugin" prompt can't apply - bump the URL/hash instead.
+  #
+  # One single-key module per IDE in `imports` (same pattern as the dev
+  # flake aliases in common/configuration.nix): a computed key can't be
+  # written as `home.file."..."` here, and a whole `home.file = { ... }`
+  # would clash with the per-key home.file assignments further down.
+  imports = map
+    (ide: {
+      home.file.".local/share/JetBrains/${ide.dir}${lib.versions.majorMinor ide.pkg.version}/better_direnv".source =
+        betterDirenvPlugin;
+    })
+    [
+      { dir = "IntelliJIdea"; pkg = pkgs.jetbrains.idea; }
+      { dir = "PyCharm"; pkg = pkgs.jetbrains.pycharm; }
+      { dir = "CLion"; pkg = pkgs.jetbrains.clion; }
+      { dir = "WebStorm"; pkg = pkgs.jetbrains.webstorm; }
+    ]
+    ++ [
+      {
+        # Devshells export ~80 variables; without this every `cd` into a
+        # project prints them all as one giant "direnv: export +AR ..." line.
+        # Kept out of the mkDefault-wrapped programs.direnv above: home-
+        # manager's own direnv module defines programs.direnv.config at
+        # normal priority (for its `silent` option), and that definition
+        # silently outranks a mkDefault one wholesale.
+        programs.direnv.config.global.hide_env_diff = true;
+      }
+    ];
+
+  # Read by `rebuild` (evaluated from the configuration about to be built)
+  # and by the activation step below.
+  xdg.configFile."nixhub/dev-projects.json".text = devProjectsManifest;
+
+  # Writes each dev project's .envrc at the location `rebuild` just found it
+  # (see scripts/dev-projects-lib.sh's write_envrcs for the details), then
+  # `direnv allow`s exactly those files - nothing else under ~/Documents gets
+  # auto-trusted, so a freshly cloned repo's own .envrc still asks first.
+  home.activation.nixhubEnvrcs = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    PATH="${lib.makeBinPath [ pkgs.git pkgs.jq pkgs.gawk pkgs.findutils pkgs.coreutils ]}:$PATH"
+    source ${../../scripts/dev-projects-lib.sh}
+    run write_envrcs ${pkgs.writeText "dev-projects.json" devProjectsManifest} ${config.programs.direnv.package}/bin/direnv
+  '';
 
   # NOTE: allowUnfree is set when pkgs is constructed in flake.nix, not here -
   # setting nixpkgs.config/overlays as a module option is deprecated once
@@ -524,6 +613,11 @@ in
 
   programs.git = lib.mkDefault {
     enable = true;
+    # The per-project .envrc files are generated from dev-projects.nix and
+    # point at this machine's NixHub, so they never belong in a project's
+    # own (often shared) repo. Repos that already track an .envrc are
+    # unaffected - ignore rules only apply to untracked files.
+    ignores = [ ".envrc" ".direnv/" ];
     settings = {
       user = {
         name = "ElliotScher";

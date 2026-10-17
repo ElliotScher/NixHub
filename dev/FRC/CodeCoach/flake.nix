@@ -88,6 +88,10 @@
                 center "Dependencies are up-to-date."
               fi
 
+              if [ -f scripts/doctor.mjs ]; then
+                node scripts/doctor.mjs --quiet || center "pnpm run doctor reported problems (see above)."
+              fi
+
               echo ""
               center "You can run your project using:"
               center "pnpm build"

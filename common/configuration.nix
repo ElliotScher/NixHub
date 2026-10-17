@@ -200,6 +200,39 @@
   environment.shellAliases.gb = lib.mkDefault "git branch";
   environment.shellAliases.fuck = lib.mkDefault "echo \"Fuck This Shit, Rebooting\" && sudo reboot now";
   environment.shellAliases.fuckoff = lib.mkDefault "echo \"Fuck This Shit, I'm Out\" && sudo shutdown now";
+  # The everyday way to apply NixHub: locates every dev project first (see
+  # scripts/rebuild.sh), then runs `sudo nixos-rebuild switch` for this host.
+  # Runs whichever checkout the last rebuild recorded, so it keeps working
+  # after NixHub moves (once `nix run <new path>#rebuild` has been run).
+  # Extra args pass through, e.g. `rebuild boot`, `rebuild --show-trace`.
+  environment.shellAliases.rebuild = lib.mkDefault ''nix run "$(cat ~/.local/state/nixhub/root 2>/dev/null || echo ~/Documents/NixHub)#rebuild" --'';
+
+  # Catches a habitual `nixos-rebuild switch` typed straight into a shell,
+  # which would skip the dev project check above. `command nixos-rebuild ...`
+  # (or `sudo nixos-rebuild ...`, which never sees shell functions) still
+  # works when bypassing it is actually intended.
+  programs.bash.interactiveShellInit = ''
+    nixos-rebuild() {
+      local arg
+      for arg in "$@"; do
+        case $arg in
+          switch|boot|test)
+            echo "nixos-rebuild: use 'rebuild' instead - it re-checks your dev projects first." >&2
+            echo "               To skip that on purpose: command nixos-rebuild $*" >&2
+            return 1
+            ;;
+        esac
+      done
+      command nixos-rebuild "$@"
+    }
+
+    # direnv's shell hook, so every interactive bash (GNOME Console, the VS
+    # Code and JetBrains integrated terminals, ...) loads a project's .envrc
+    # on cd. home-manager's programs.direnv only installs this hook into a
+    # home-manager-managed ~/.bashrc (programs.bash.enable), which this
+    # config doesn't use - without this line direnv never ran in a shell.
+    eval "$(${pkgs.direnv}/bin/direnv hook bash)"
+  '';
 
   # One alias per development flake under dev/ (e.g. `RBE_4540` runs
   # `nix develop /home/elliotscher/Documents/NixHub/dev/WPI/RBE_4540`),

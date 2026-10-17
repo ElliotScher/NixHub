@@ -60,10 +60,23 @@
     {
       nixosConfigurations = lib.genAttrs hostNames mkHost;
 
-      packages.${system}.bootstrap = pkgs.writeShellApplication {
-        name = "bootstrap";
-        runtimeInputs = [ pkgs.git pkgs.gh pkgs.nixos-install-tools ];
-        text = builtins.readFile ./bootstrap.sh;
+      packages.${system} = {
+        bootstrap = pkgs.writeShellApplication {
+          name = "bootstrap";
+          runtimeInputs = [ pkgs.git pkgs.gh pkgs.nixos-install-tools ];
+          text = builtins.readFile ./bootstrap.sh;
+        };
+
+        # `nixos-rebuild switch` for this machine, preceded by locating every
+        # dev project in users/elliotscher/dev-projects.nix (fails before
+        # switching if one is missing or duplicated). See scripts/rebuild.sh.
+        rebuild = pkgs.writeShellApplication {
+          name = "rebuild";
+          runtimeInputs = [ pkgs.git pkgs.jq pkgs.gawk pkgs.findutils pkgs.coreutils ];
+          text = ''
+            NIXHUB_DEV_PROJECTS_LIB=${./scripts/dev-projects-lib.sh}
+          '' + builtins.readFile ./scripts/rebuild.sh;
+        };
       };
 
       apps.${system} = {
@@ -71,6 +84,11 @@
           type = "app";
           program = "${self.packages.${system}.bootstrap}/bin/bootstrap";
           meta.description = "Set up a new machine: clone NixHub, assign the next hostname, generate hardware config, and scaffold the host";
+        };
+        rebuild = {
+          type = "app";
+          program = "${self.packages.${system}.rebuild}/bin/rebuild";
+          meta.description = "Locate every dev project, then nixos-rebuild switch this machine";
         };
         default = self.apps.${system}.bootstrap;
       };
@@ -90,6 +108,17 @@
             cp ${./scripts/pick-hostname.sh} pick-hostname.sh
             cp ${./scripts/test-pick-hostname.sh} test-pick-hostname.sh
             ${pkgs.bash}/bin/bash test-pick-hostname.sh
+            touch $out
+          '';
+
+          # Pure, sandboxable test of the dev-project matching and .envrc
+          # writing shared by rebuild.sh and home.nix's nixhubEnvrcs step.
+          dev-projects-logic = pkgs.runCommand "dev-projects-tests" {
+            nativeBuildInputs = [ pkgs.git pkgs.jq pkgs.gawk ];
+          } ''
+            cp ${./scripts/dev-projects-lib.sh} dev-projects-lib.sh
+            cp ${./scripts/test-dev-projects.sh} test-dev-projects.sh
+            ${pkgs.bash}/bin/bash test-dev-projects.sh
             touch $out
           '';
 

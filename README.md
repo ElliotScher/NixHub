@@ -170,8 +170,36 @@ since they build real system closures and boot a VM.
 ## Rebuilding an existing machine
 
 ```
-sudo nixos-rebuild switch --flake ~/Documents/NixHub#<name>
+rebuild
 ```
 
+`rebuild` (a shell alias for `nix run ~/Documents/NixHub#rebuild --`, see
+`scripts/rebuild.sh`) locates every dev project listed in
+`users/elliotscher/dev-projects.nix`, then runs
+`sudo nixos-rebuild switch --flake <NixHub>#$(hostname)`. Extra arguments pass
+through (`rebuild boot`, `rebuild --show-trace`). If a project can't be found,
+or is cloned in more than one place, it stops **before** switching;
+`rebuild --skip-project-check` switches anyway (e.g. on a fresh machine before
+the projects are cloned). A plain `nixos-rebuild switch` typed into a shell is
+caught and points you at `rebuild`; `command nixos-rebuild ...` bypasses that.
+
 No symlink to `/etc/nixos` is used - the repo's location is the single
-source of truth, and the `--flake` path always points directly at it.
+source of truth. `rebuild` records where it ran from in
+`~/.local/state/nixhub/root`, so after moving the checkout, run
+`nix run <new path>#rebuild` once and everything follows it.
+
+## Dev project environments in IDEs
+
+Each project in `users/elliotscher/dev-projects.nix` - keyed by its git
+remote, never its path - gets a generated, globally git-ignored `.envrc`
+containing `use nixhub <flake under dev/>`. direnv loads that project's
+devshell on `cd`, and the IDEs pick it up through their direnv plugins:
+
+- **VS Code:** the `mkhl.direnv` extension is installed declaratively.
+- **JetBrains:** the better_direnv plugin is linked into IDEA, PyCharm,
+  CLion and WebStorm declaratively (pinned in `home.nix`). Tick "Enable
+  direnv" in a run configuration, or once in the run configuration
+  templates; the built-in terminal already gets the env from your shell.
+
+Adding a project is one line in `dev-projects.nix` plus a `rebuild`. Moving
+or renaming a project needs no edit at all - the next `rebuild` finds it.

@@ -155,6 +155,13 @@ else
   echo "Skipped. The commit is local only - push manually later with: git push"
 fi
 
+# Record where NixHub lives for the `rebuild` alias and the `use nixhub`
+# direnv helper. The first switch below deliberately stays a plain
+# nixos-rebuild: no dev projects are cloned yet, so `rebuild`'s project
+# check would only fail - use `rebuild` for every switch after this one.
+mkdir -p "$HOME/.local/state/nixhub"
+printf '%s\n' "$REPO_DIR" > "$HOME/.local/state/nixhub/root"
+
 REBUILD_CMD="sudo nixos-rebuild switch --flake $REPO_DIR#$NEW_HOST"
 
 echo
