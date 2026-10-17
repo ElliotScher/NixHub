@@ -535,7 +535,7 @@ in
         helper = "!gh auth git-credential";
       };
       alias = {
-        prune-branches = "!git remote prune origin && git branch -vv | grep ': gone]' | awk '{print $1}' | xargs -r git branch -d";
+        prune-branches = ''!git remote prune origin && git worktree prune && git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads | awk '$2 == "[gone]" {print $1}' | xargs -r git branch -d'';
       };
     };
   };
