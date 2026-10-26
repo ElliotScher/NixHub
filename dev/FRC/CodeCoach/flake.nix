@@ -43,6 +43,13 @@
             pkgs.python3
           ];
 
+          # robotpy's manylinux wheels dlopen libstdc++, which NixOS doesn't
+          # put on the default search path. scripts/fixtures.mjs adds this to
+          # LD_LIBRARY_PATH for Python fixture runs only, rather than setting
+          # LD_LIBRARY_PATH shell-wide (which would override every Nix binary's
+          # RUNPATH).
+          env.CODECOACH_PYTHON_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ];
+
           # Per-version JDK homes, named to match what actions/setup-java
           # exports in CI (there with an _X64/_ARM64 suffix, which CodeCoach's
           # JDK resolver also accepts). The resolver picks one per project
@@ -65,8 +72,15 @@
             # Same problem as Electron for @vscode/test-electron's downloaded
             # VS Code - reuse the system one (installed via home.nix) instead
             # of pulling a second unfree copy into this shell's closure.
+            # bin/code is the CLI launcher, which hands off to a detached
+            # window and exits 0 (so tests "pass" without running); the test
+            # runner needs the Electron binary at lib/vscode/code instead.
             if [ -z "''${CODECOACH_VSCODE_EXECUTABLE:-}" ] && command -v code >/dev/null 2>&1; then
-              export CODECOACH_VSCODE_EXECUTABLE="$(readlink -f "$(command -v code)")"
+              vscode_electron="$(dirname "$(readlink -f "$(command -v code)")")/../lib/vscode/code"
+              if [ -x "$vscode_electron" ]; then
+                export CODECOACH_VSCODE_EXECUTABLE="$(readlink -f "$vscode_electron")"
+              fi
+              unset vscode_electron
             fi
 
             ${shellBanner {

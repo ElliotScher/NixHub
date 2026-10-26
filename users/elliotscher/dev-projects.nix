@@ -29,6 +29,8 @@
     "Team-190/XRP-Training-Base" = { flake = "FRC/FRC_190/Robot_Code"; shell = "roborio"; };
     "Team-190/GompeiVision" = { flake = "FRC/FRC_190/GompeiVision"; };
     "ElliotScher/Micnote" = { flake = "Personal/Micnote"; };
+    # GaitLib CVT swerve vendordep (WPILib 2026 C++, JDK 17).
+    "Quantum-Wind/GaitLib" = { flake = "WPI/GaitLib"; };
     # 2k26-Robot-Code / 2k26-SystemCore-Alpha deliberately stay on the
     # code-frc-* launchers in home.nix (per-profile JDK handling).
   };

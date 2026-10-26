@@ -53,6 +53,23 @@
             pkgs.xz
           ];
 
+          # flutter with those libraries on LD_LIBRARY_PATH for it and the
+          # apps `flutter run` starts. Built bundles find them through their
+          # RUNPATH anyway; this is a fallback. Scoped to flutter on purpose:
+          # exporting it shell-wide made every other program pick up this
+          # nixpkgs' libraries, e.g. the system kicad-cli then loaded an
+          # older glibc's libm and crashed.
+          flutter = pkgs.symlinkJoin {
+            name = "flutter-micnote-${pkgs.flutter.version}";
+            inherit (pkgs.flutter) version;
+            paths = [ pkgs.flutter ];
+            nativeBuildInputs = [ pkgs.makeWrapper ];
+            postBuild = ''
+              wrapProgram $out/bin/flutter \
+                --prefix LD_LIBRARY_PATH : ${pkgs.lib.makeLibraryPath (flutterLinuxLibs ++ [ pkgs.vulkan-loader ])}
+            '';
+          };
+
           commonPackages = [
             # Firmware (Zephyr / nRF Connect SDK)
             zephyrSdk
@@ -94,7 +111,7 @@
             pkgs.llama-cpp
 
             # App (Flutter)
-            pkgs.flutter
+            flutter
           ] ++ flutterLinuxLibs;
 
           commonShellHook = ''
@@ -104,7 +121,12 @@
             # this just makes arm-zephyr-eabi-gcc/-gdb callable directly too.
             export PATH="${zephyrSdk}/arm-zephyr-eabi/bin:$PATH"
             export CMAKE_EXPORT_COMPILE_COMMANDS=1
-            export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath (flutterLinuxLibs ++ [ pkgs.vulkan-loader ])}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            # Drop any inherited LD_LIBRARY_PATH: it outranks RUNPATH, so e.g.
+            # CLion's wrapper (gcc 15 libstdc++, users/elliotscher/account.nix)
+            # made binaries built here with the newer g++ fail to start with
+            # "GLIBCXX_3.4.36 not found". Nothing here needs it; the flutter
+            # wrapper above sets its own.
+            unset LD_LIBRARY_PATH
             # nixpkgs' flutter wrapper sets up its own SDK root; a stale
             # FLUTTER_ROOT from elsewhere would override it.
             unset FLUTTER_ROOT
@@ -166,7 +188,7 @@
             shellHook = ''
               ${shellBanner {
                 title = "Welcome to the Micnote Development Environment";
-                subtitle = "Zephyr SDK ${zephyrSdk.version}, LLVM ${llvm.clang.version}, Flutter ${pkgs.flutter.version}.";
+                subtitle = "Zephyr SDK ${zephyrSdk.version}, LLVM ${llvm.clang.version}, Flutter ${flutter.version}.";
               }}
               ${commonShellHook}
               echo "$BAR"
