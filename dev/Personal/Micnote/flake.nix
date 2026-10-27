@@ -81,6 +81,9 @@
             pkgs.ccache
             pkgs.python3
             pkgs.uv
+            # Lints/formats the repo's Python tooling (proto/regen.py). CI pins
+            # RUFF_VERSION in tools/versions.env to this nixpkgs' version.
+            pkgs.ruff
             pkgs.nrfutil
             # Headless = just libjlinkarm + udev rules: enough for nrfutil
             # (and pyocd) to flash over J-Link. The full segger-jlink pack
@@ -101,7 +104,10 @@
             # above the spec's gcc >= 14 floor) - an explicit gccNN here
             # would only be shadowed by it on PATH.
             pkgs.pkg-config
-            pkgs.protobuf # protoc, for nanopb regeneration
+            # protoc for proto/regen.py. Its pinned grpcio-tools wheel bundles
+            # one, but that can't load libstdc++ on NixOS, so nanopb falls back
+            # to this; the generated code is identical either way.
+            pkgs.protobuf
             pkgs.dbus
             pkgs.bluez
             pkgs.vulkan-headers
