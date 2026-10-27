@@ -18,6 +18,8 @@
     "ElliotScher/WPI-RBE-4540" = { flake = "WPI/RBE_4540"; };
     "ElliotScher/WPI-RBE-4540-FinalProject" = { flake = "WPI/RBE_4540"; };
     "ElliotScher/WPI-Acadia-AI-E26" = { flake = "WPI/Acadia_AI_E26"; };
+    # Database Systems I - Oracle SQL Developer for the WPI Oracle server.
+    "ElliotScher/WPI-CS-3431" = { flake = "WPI/CS_3431"; };
     "ElliotScher/Metrology" = { flake = "Personal/Metrology"; };
     "ElliotScher/Portfolio" = { flake = "Personal/Portfolio"; };
     "jhlee0409/claude-code-history-viewer" = { flake = "Personal/Claude_Code_History_Viewer"; };
