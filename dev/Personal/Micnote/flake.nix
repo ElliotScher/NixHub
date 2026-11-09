@@ -42,7 +42,7 @@
           # NCS 3.x targets Zephyr SDK 0.17.x. Only the Arm toolchain is
           # fetched - the plain `sdk` attribute ships with no toolchains,
           # and sdkFull pulls every architecture.
-          zephyrSdk = zephyr.sdk-0_17.override { targets = [ "arm-zephyr-eabi" ]; };
+          zephyrSdk = zephyr.sdk-1_0.override { targets = [ "arm-zephyr-eabi" ]; };
           llvm = pkgs.llvmPackages_latest;
 
           # Native libraries the Flutter Linux desktop build links against.
@@ -125,7 +125,7 @@
             export ZEPHYR_SDK_INSTALL_DIR="${zephyrSdk}"
             # Zephyr's CMake finds the toolchain through the variable above;
             # this just makes arm-zephyr-eabi-gcc/-gdb callable directly too.
-            export PATH="${zephyrSdk}/arm-zephyr-eabi/bin:$PATH"
+            export PATH="${zephyrSdk}/gnu/arm-zephyr-eabi/bin:$PATH"
             export CMAKE_EXPORT_COMPILE_COMMANDS=1
             # Drop any inherited LD_LIBRARY_PATH: it outranks RUNPATH, so e.g.
             # CLion's wrapper (gcc 15 libstdc++, users/elliotscher/account.nix)

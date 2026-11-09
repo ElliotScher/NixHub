@@ -25,7 +25,7 @@
       tmux
       proton-vpn
 
-      brave
+      # Brave was removed from nixpkgs; it comes from Flathub instead (below).
       google-chrome
 
       slack
@@ -79,5 +79,12 @@
       kicad
       (callPackage ./cad-assistant.nix { })
     ];
+  };
+
+  # Brave's own Flathub build, installed and updated by nix-flatpak on rebuild.
+  services.flatpak = {
+    enable = true;
+    packages = [ "com.brave.Browser" ];
+    update.onActivation = true;
   };
 }

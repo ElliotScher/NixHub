@@ -439,7 +439,7 @@ in
       disable-user-extensions = false;
 
       favorite-apps = [
-        "brave-browser.desktop"
+        "com.brave.Browser.desktop"
         "google-chrome.desktop"
         "org.gnome.Console.desktop"
         "org.gnome.Nautilus.desktop"

@@ -19,6 +19,7 @@ pkgs.testers.nixosTest {
         ../common/configuration.nix
         ../users/elliotscher/account.nix
         home-manager.nixosModules.home-manager
+        inputs.nix-flatpak.nixosModules.nix-flatpak
       ];
 
       home-manager.useGlobalPkgs = true;

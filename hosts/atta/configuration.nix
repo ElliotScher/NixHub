@@ -6,6 +6,20 @@
   # Anything in ../../common/configuration.nix marked with lib.mkDefault can
   # be overridden with a plain assignment.
 
+  # Framework Laptop 13, Intel Core Ultra Series 1 mainboard (replaced the
+  # 12th-gen Intel board): ambient light sensor, framework-tool, audio
+  # tuning, Ethernet expansion card power fix, laptop/SSD defaults.
+  imports = [ inputs.nixos-hardware.nixosModules.framework-intel-core-ultra-series1 ];
+
+  # Install GRUB to the removable fallback path (\EFI\BOOT\BOOTX64.EFI)
+  # instead of registering a boot entry in the mainboard's NVRAM. NVRAM
+  # lives on the board, not the disk, so after the mainboard swap the old
+  # "NixOS-boot" entry was gone and the disk wasn't bootable until it was
+  # fixed by hand. This way every rebuild keeps the fallback copy current,
+  # and a future board swap or BIOS reset still boots.
+  boot.loader.efi.canTouchEfiVariables = false;
+  boot.loader.grub.efiInstallAsRemovable = true;
+
   # No physical swap is configured on this host (see hardware-configuration.nix),
   # which leaves systemd-oomd's memory-pressure handling degraded and lets the
   # system stall hard under memory pressure before the kernel OOM killer finally

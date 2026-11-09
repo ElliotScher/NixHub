@@ -4,6 +4,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
+    # Per-model hardware profiles (e.g. Framework mainboards), imported by
+    # individual hosts.
+    nixos-hardware.url = "github:NixOS/nixos-hardware";
+
     home-manager = {
       url = "github:nix-community/home-manager/release-26.05";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -14,6 +18,9 @@
     frc-nix.url = "github:frc4451/frc-nix";
     frc-nix-alpha.url = "github:ElliotScher/frc-nix";
     globalprotect-openconnect.url = "github:yuezk/GlobalProtect-openconnect";
+
+    # Declarative Flatpak installs, for apps nixpkgs no longer carries (Brave).
+    nix-flatpak.url = "github:gmodena/nix-flatpak/?ref=latest";
   };
 
   outputs = { self, nixpkgs, home-manager, ... }@inputs:
@@ -44,6 +51,7 @@
             ./hosts/${name}/configuration.nix
             ./hosts/${name}/hardware-configuration.nix
             home-manager.nixosModules.home-manager
+            inputs.nix-flatpak.nixosModules.nix-flatpak
             {
               home-manager.useGlobalPkgs = true;
               home-manager.useUserPackages = true;
